@@ -10,6 +10,7 @@ import { getDirectory, getDisplayNames, searchDirectory } from './directory.ts';
 import { parseLocation } from './location.ts';
 import { findSimultaneousWindows, summarizeParticipants } from './overlap.ts';
 import { readPresence } from './presence.ts';
+import { readRosters } from './roster.ts';
 import { getOwnerPrefix } from './schema.ts';
 
 const MAX_PLAYER_RESULTS = 50;
@@ -77,15 +78,17 @@ router.get('/find-links', (req, res) => {
     const buckets = readPresence(prefix, targetIds);
     const names = getDisplayNames(prefix, targetIds);
 
+    // Every selected user must have been present — a "link" between three
+    // people is not two of them meeting. Filtering first also means only
+    // instances that can produce a session get a roster lookup.
+    const matched = [...buckets.values()].filter(
+        (bucket) => bucket.byUser.size === targetIds.length
+    );
+    const rosters = readRosters(matched.map((bucket) => bucket.key));
+
     const sessions: OverlappingSession[] = [];
 
-    for (const bucket of buckets.values()) {
-        // Every selected user must have been present — a "link" between three
-        // people is not two of them meeting.
-        if (bucket.byUser.size !== targetIds.length) {
-            continue;
-        }
-
+    for (const bucket of matched) {
         const info = parseLocation(bucket.location);
 
         for (const window of findSimultaneousWindows(
@@ -99,7 +102,8 @@ router.get('/find-links', (req, res) => {
                 joinedAt: window.start,
                 leftAt: window.end,
                 durationMs: window.end - window.start,
-                participants: summarizeParticipants(window, names)
+                participants: summarizeParticipants(window, names),
+                roster: rosters.get(bucket.key) ?? null
             });
         }
     }

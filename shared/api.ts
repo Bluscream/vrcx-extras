@@ -44,6 +44,21 @@ export interface OverlappingSession {
     leftAt: number;
     durationMs: number;
     participants: SessionParticipant[];
+    /**
+     * Everyone ever recorded in this instance, from the local game log.
+     * `null` when the owner was never in it, so no roster exists — distinct
+     * from a roster that is genuinely empty.
+     */
+    roster: InstanceRoster | null;
+}
+
+export interface InstanceRoster {
+    /** Distinct users ever recorded in this instance. */
+    total: number;
+    /** Display names, alphabetical; capped for transport. */
+    names: string[];
+    /** How many names the cap dropped. */
+    truncated: number;
 }
 
 export interface DatabaseStatus {

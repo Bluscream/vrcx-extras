@@ -5,6 +5,7 @@
 export type {
     AccessType,
     DatabaseStatus,
+    InstanceRoster,
     OverlappingSession,
     Player,
     SessionParticipant

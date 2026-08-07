@@ -150,6 +150,29 @@ export function queryAll<T>(
     return rows.map((row) => decode(new RowReader(row, sql)));
 }
 
+/**
+ * Runs one prepared statement repeatedly, once per parameter set.
+ *
+ * Preferred over a single query with many OR-ed branches: SQLite handles that
+ * as a MULTI-INDEX OR and builds a temporary b-tree to deduplicate row ids
+ * across every branch, which measured ~90x slower than looping the same index
+ * range scan (658ms vs 7ms across 57 keys).
+ */
+export function queryEach<T>(
+    sql: string,
+    paramSets: SQLInputValue[][],
+    decode: Decoder<T>
+): T[] {
+    const statement = getDb().prepare(sql);
+    const out: T[] = [];
+    for (const params of paramSets) {
+        for (const row of statement.all(...params)) {
+            out.push(decode(new RowReader(row, sql)));
+        }
+    }
+    return out;
+}
+
 export function queryOne<T>(
     sql: string,
     params: SQLInputValue[],

@@ -35,7 +35,13 @@ function matchesFilter(session: OverlappingSession, needle: string) {
         session.location.toLowerCase().includes(needle) ||
         session.participants.some((participant) =>
             participant.displayName.toLowerCase().includes(needle)
-        )
+        ) ||
+        // Matching the roster makes the filter answer "which of these meetups
+        // was <someone else> also in?".
+        (session.roster?.names.some((name) =>
+            name.toLowerCase().includes(needle)
+        ) ??
+            false)
     );
 }
 

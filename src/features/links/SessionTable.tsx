@@ -14,7 +14,7 @@ import {
 } from '@/hooks/useSortableRows';
 import { buildLaunchUri, formatDateTime, formatDuration } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { AccessType, OverlappingSession } from '@/types';
+import type { AccessType, InstanceRoster, OverlappingSession } from '@/types';
 import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
 import {
@@ -40,7 +40,7 @@ type ColumnKey =
     | 'instance'
     | 'duration'
     | 'joinedAt'
-    | 'participants';
+    | 'players';
 
 const accessors: SortAccessors<OverlappingSession, ColumnKey> = {
     world: (session) => session.worldName || session.worldId,
@@ -48,14 +48,15 @@ const accessors: SortAccessors<OverlappingSession, ColumnKey> = {
     instance: (session) => session.instanceId,
     duration: (session) => session.durationMs,
     joinedAt: (session) => session.joinedAt,
-    participants: (session) => session.participants.length
+    // Unknown rosters sort below every known count rather than as zero.
+    players: (session) => session.roster?.total ?? -1
 };
 
 // Time-like and count columns are most useful largest-first.
 const defaultDirections: Partial<Record<ColumnKey, SortDirection>> = {
     duration: 'desc',
     joinedAt: 'desc',
-    participants: 'desc'
+    players: 'desc'
 };
 
 const columns: { key: ColumnKey; label: string; className?: string }[] = [
@@ -64,8 +65,38 @@ const columns: { key: ColumnKey; label: string; className?: string }[] = [
     { key: 'instance', label: 'Instance' },
     { key: 'duration', label: 'Duration', className: 'text-right' },
     { key: 'joinedAt', label: 'When' },
-    { key: 'participants', label: 'Players' }
+    { key: 'players', label: 'Players', className: 'text-right' }
 ];
+
+/**
+ * Unique players ever recorded in the instance, with the full list on hover.
+ * A native `title` keeps this readable for long rosters and needs no popover
+ * machinery; the count is the sortable value, the names are the detail.
+ */
+function RosterCount({ roster }: { roster: InstanceRoster | null }) {
+    if (!roster) {
+        return (
+            <span
+                className="text-muted-foreground"
+                title="Not recorded — you were not in this instance, so its player list is unknown"
+            >
+                —
+            </span>
+        );
+    }
+
+    const shown = roster.names.join('\n');
+    const tooltip =
+        roster.truncated > 0
+            ? `${shown}\n… and ${roster.truncated} more`
+            : shown;
+
+    return (
+        <span className="cursor-help underline decoration-dotted underline-offset-4" title={tooltip}>
+            {roster.total}
+        </span>
+    );
+}
 
 function sessionKey(session: OverlappingSession) {
     return `${session.location}-${session.joinedAt}`;
@@ -189,20 +220,8 @@ export function SessionTable({
                                     </time>
                                 </TableCell>
 
-                                <TableCell>
-                                    <div className="flex flex-wrap items-center gap-1">
-                                        {session.participants.map(
-                                            (participant) => (
-                                                <Badge
-                                                    key={participant.userId}
-                                                    variant="secondary"
-                                                    title={participant.userId}
-                                                >
-                                                    {participant.displayName}
-                                                </Badge>
-                                            )
-                                        )}
-                                    </div>
+                                <TableCell className="text-right tabular-nums">
+                                    <RosterCount roster={session.roster} />
                                 </TableCell>
 
                                 <TableCell className="text-right">
