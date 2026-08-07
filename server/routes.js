@@ -52,6 +52,16 @@ router.get(
         }
 
         const entries = await getDirectory(db, prefix);
+
+        // `ids` hydrates a deep link (/player-links?users=...) back into full
+        // player records, so it bypasses ranking and preserves the given order.
+        const ids = parseUserIds(req.query.ids);
+        if (ids.length > 0) {
+            const byId = new Map(entries.map((entry) => [entry.id, entry]));
+            res.json(ids.map((id) => byId.get(id)).filter(Boolean));
+            return;
+        }
+
         res.json(
             searchDirectory(
                 entries,

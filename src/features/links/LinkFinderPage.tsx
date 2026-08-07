@@ -4,11 +4,13 @@ import {
     SearchIcon,
     UsersIcon
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { useReportResultCount } from '@/components/layout/AppShellLayout';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useLinkFinder } from '@/hooks/useLinkFinder';
+import { useSelectedPlayersParam } from '@/hooks/useSelectedPlayersParam';
 import { buildLaunchUri } from '@/lib/format';
 import type { OverlappingSession, Player } from '@/types';
 import { Button } from '@/ui/button';
@@ -37,12 +39,15 @@ function matchesFilter(session: OverlappingSession, needle: string) {
     );
 }
 
-export function LinkFinderPage({
-    onResultCountChange
-}: {
-    onResultCountChange: (count: number | null) => void;
-}) {
-    const [selected, setSelected] = useState<Player[]>([]);
+export function LinkFinderPage() {
+    const onResultCountChange = useReportResultCount();
+    const {
+        selected,
+        updateSelection,
+        isHydrating,
+        hydrationError,
+        hadDeepLink
+    } = useSelectedPlayersParam();
     const [filter, setFilter] = useState('');
     const debouncedFilter = useDebouncedValue(filter.trim().toLowerCase(), 150);
 
@@ -66,18 +71,29 @@ export function LinkFinderPage({
     }, [filteredResults, onResultCountChange]);
 
     function addPlayer(player: Player) {
-        setSelected((current) =>
-            current.some((entry) => entry.id === player.id)
-                ? current
-                : [...current, player]
-        );
+        if (!selected.some((entry) => entry.id === player.id)) {
+            updateSelection([...selected, player]);
+        }
     }
 
     function removePlayer(id: string) {
-        setSelected((current) => current.filter((entry) => entry.id !== id));
+        updateSelection(selected.filter((entry) => entry.id !== id));
     }
 
-    const canSearch = selected.length > 0 && !isLoading;
+    // A deep link should show results without a second click, but only once:
+    // afterwards the button drives the search.
+    const hasAutoRun = useRef(false);
+    useEffect(() => {
+        if (hasAutoRun.current || isHydrating || !hadDeepLink) {
+            return;
+        }
+        if (selected.length > 0) {
+            hasAutoRun.current = true;
+            run(selected.map((player) => player.id));
+        }
+    }, [isHydrating, hadDeepLink, selected, run]);
+
+    const canSearch = selected.length > 0 && !isLoading && !isHydrating;
 
     return (
         <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4">
@@ -93,6 +109,7 @@ export function LinkFinderPage({
                         selected={selected}
                         onAdd={addPlayer}
                         onRemove={removePlayer}
+                        isBusy={isHydrating}
                     />
 
                     <Button
@@ -107,6 +124,13 @@ export function LinkFinderPage({
                     </Button>
                 </CardContent>
             </Card>
+
+            {hydrationError ? (
+                <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-lg px-3 py-2 text-sm">
+                    <AlertCircleIcon className="size-4 shrink-0" />
+                    {hydrationError}
+                </div>
+            ) : null}
 
             {error ? (
                 <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-lg px-3 py-2 text-sm">
@@ -131,7 +155,7 @@ export function LinkFinderPage({
                 </div>
             ) : null}
 
-            {isLoading ? (
+            {isLoading || isHydrating ? (
                 <div className="text-muted-foreground flex flex-col items-center gap-2 py-16 text-sm">
                     <Spinner className="size-6" />
                     Analyzing overlapping activity…

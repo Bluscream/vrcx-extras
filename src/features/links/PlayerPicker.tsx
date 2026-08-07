@@ -14,11 +14,14 @@ import { PlayerMarkers } from './PlayerMarkers';
 export function PlayerPicker({
     selected,
     onAdd,
-    onRemove
+    onRemove,
+    isBusy = false
 }: {
     selected: Player[];
     onAdd: (player: Player) => void;
     onRemove: (id: string) => void;
+    /** Shows the spinner while a deep link is being resolved. */
+    isBusy?: boolean;
 }) {
     const [query, setQuery] = useState('');
     const [isOpen, setIsOpen] = useState(false);
@@ -139,7 +142,7 @@ export function PlayerPicker({
                     className="h-6 min-w-32 flex-1 border-0 bg-transparent px-1 text-sm focus-visible:ring-0 dark:bg-transparent"
                 />
 
-                {isSearching ? (
+                {isSearching || isBusy ? (
                     <Spinner className="text-muted-foreground mr-1 size-3.5" />
                 ) : null}
             </div>

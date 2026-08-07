@@ -40,6 +40,11 @@ export function searchPlayers(query: string, signal?: AbortSignal) {
     return request<Player[]>('players', { q: query }, signal);
 }
 
+/** Hydrates user ids from a deep link into full player records. */
+export function resolvePlayers(ids: string[], signal?: AbortSignal) {
+    return request<Player[]>('players', { ids: ids.join(',') }, signal);
+}
+
 export function findLinks(userIds: string[], signal?: AbortSignal) {
     return request<OverlappingSession[]>(
         'find-links',
