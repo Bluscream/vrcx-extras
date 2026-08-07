@@ -76,3 +76,16 @@ export function formatTime(ms: number) {
 export function buildLaunchUri(location: string) {
     return `vrchat://launch?ref=vrcx&location=${encodeURIComponent(location)}`;
 }
+
+/**
+ * Opens a world in VRCX-0 rather than launching VRChat.
+ *
+ * VRCX-0 registers the `vrcx-0` scheme and accepts only `world/open`,
+ * `avatar/open` and `collection/import`, each keyed by a bare id (its
+ * `is_world_id` rejects anything but a `wrld_` UUID). There is deliberately no
+ * instance form, so this opens the world; the instance itself is only
+ * reachable through the `vrchat://` launch link.
+ */
+export function buildVrcxWorldUri(worldId: string) {
+    return `vrcx-0://world/open?id=${encodeURIComponent(worldId)}`;
+}

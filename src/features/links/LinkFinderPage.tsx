@@ -4,7 +4,7 @@ import {
     SearchIcon,
     UsersIcon
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useReportResultCount } from '@/components/layout/AppShellLayout';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
@@ -50,6 +50,7 @@ export function LinkFinderPage() {
     const {
         selected,
         updateSelection,
+        commitSelectionToUrl,
         isHydrating,
         hydrationError,
         hadDeepLink
@@ -86,6 +87,15 @@ export function LinkFinderPage() {
         updateSelection(selected.filter((entry) => entry.id !== id));
     }
 
+    const search = useCallback(
+        async (players: Player[]) => {
+            if (await run(players.map((player) => player.id))) {
+                commitSelectionToUrl(players);
+            }
+        },
+        [run, commitSelectionToUrl]
+    );
+
     // A deep link should show results without a second click, but only once:
     // afterwards the button drives the search.
     const hasAutoRun = useRef(false);
@@ -95,9 +105,9 @@ export function LinkFinderPage() {
         }
         if (selected.length > 0) {
             hasAutoRun.current = true;
-            run(selected.map((player) => player.id));
+            void search(selected);
         }
-    }, [isHydrating, hadDeepLink, selected, run]);
+    }, [isHydrating, hadDeepLink, selected, search]);
 
     const canSearch = selected.length > 0 && !isLoading && !isHydrating;
 
@@ -121,12 +131,10 @@ export function LinkFinderPage() {
                     <Button
                         className="shrink-0"
                         disabled={!canSearch}
-                        onClick={() =>
-                            run(selected.map((player) => player.id))
-                        }
+                        onClick={() => void search(selected)}
                     >
-                        {isLoading ? <Spinner /> : <SearchIcon />}
-                        Find links
+                        {isLoading ? <Spinner /> : <span aria-hidden>🔍</span>}
+                        Search
                     </Button>
                 </CardContent>
             </Card>

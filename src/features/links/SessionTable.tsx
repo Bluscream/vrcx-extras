@@ -12,7 +12,11 @@ import {
     type SortDirection,
     useSortableRows
 } from '@/hooks/useSortableRows';
-import { buildLaunchUri, formatDateTime, formatDuration } from '@/lib/format';
+import {
+    buildVrcxWorldUri,
+    formatDateTime,
+    formatDuration
+} from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AccessType, InstanceRoster, OverlappingSession } from '@/types';
 import { Badge } from '@/ui/badge';
@@ -245,12 +249,17 @@ export function SessionTable({
                                         <Button
                                             variant="ghost"
                                             size="icon-sm"
-                                            aria-label="Launch instance in VRChat"
-                                            title="Launch instance in VRChat"
+                                            aria-label="Open world in VRCX"
+                                            title={
+                                                session.worldId
+                                                    ? 'Open world in VRCX'
+                                                    : 'World is unknown, cannot open in VRCX'
+                                            }
+                                            disabled={!session.worldId}
                                             onClick={() => {
                                                 window.location.href =
-                                                    buildLaunchUri(
-                                                        session.location
+                                                    buildVrcxWorldUri(
+                                                        session.worldId
                                                     );
                                             }}
                                         >

@@ -11,9 +11,10 @@ export function useLinkFinder() {
 
     useEffect(() => () => controllerRef.current?.abort(), []);
 
-    const run = useCallback(async (userIds: string[]) => {
+    /** Resolves true once results are in; false on error or supersession. */
+    const run = useCallback(async (userIds: string[]): Promise<boolean> => {
         if (userIds.length === 0) {
-            return;
+            return false;
         }
 
         controllerRef.current?.abort();
@@ -25,12 +26,14 @@ export function useLinkFinder() {
 
         try {
             setResults(await findLinks(userIds, controller.signal));
+            return true;
         } catch (cause) {
             if (isAbortError(cause)) {
-                return;
+                return false;
             }
             setResults([]);
             setError(toErrorMessage(cause));
+            return false;
         } finally {
             if (!controller.signal.aborted) {
                 setIsLoading(false);
