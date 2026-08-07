@@ -244,6 +244,66 @@ export function searchDirectory(entries, rawQuery, limit) {
         .map(({ entry }) => entry);
 }
 
+/**
+ * Current display name per user id. VRChat allows renames, and the feed tables
+ * keep whatever name was current when each row was written — one user id here
+ * legitimately spans several names. The friend list wins when present, since it
+ * reflects the live name; otherwise the most recent sighting does.
+ */
+export async function getDisplayNames(db, prefix, userIds) {
+    const placeholders = userIds.map(() => '?').join(', ');
+    const names = new Map();
+
+    const sources = [
+        ['gamelog_join_leave', 'created_at'],
+        [`${prefix}_feed_gps`, 'created_at']
+    ];
+
+    for (const [table, orderColumn] of sources) {
+        if (!(await tableExists(db, table))) {
+            continue;
+        }
+        for (const row of await queryAll(
+            db,
+            `SELECT user_id, display_name, MAX(${orderColumn}) AS seen_at
+             FROM ${table}
+             WHERE user_id IN (${placeholders})
+               AND display_name IS NOT NULL AND display_name != ''
+             GROUP BY user_id`,
+            userIds
+        )) {
+            const existing = names.get(row.user_id);
+            if (!existing || existing.seenAt < row.seen_at) {
+                names.set(row.user_id, {
+                    name: row.display_name,
+                    seenAt: row.seen_at
+                });
+            }
+        }
+    }
+
+    const friendTable = `${prefix}_friend_log_current`;
+    if (await tableExists(db, friendTable)) {
+        for (const row of await queryAll(
+            db,
+            `SELECT user_id, display_name FROM ${friendTable}
+             WHERE user_id IN (${placeholders})`,
+            userIds
+        )) {
+            if (row.display_name) {
+                names.set(row.user_id, {
+                    name: row.display_name,
+                    seenAt: '9999'
+                });
+            }
+        }
+    }
+
+    return new Map(
+        [...names].map(([userId, entry]) => [userId, entry.name])
+    );
+}
+
 export function invalidateDirectory() {
     cache = null;
 }

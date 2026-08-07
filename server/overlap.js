@@ -81,7 +81,7 @@ export function findSimultaneousWindows(visitsByUser, userIds) {
 }
 
 /** One representative participant entry per user for a given window. */
-export function summarizeParticipants(window) {
+export function summarizeParticipants(window, displayNames = new Map()) {
     const byUser = new Map();
 
     for (const visit of window.visits) {
@@ -92,7 +92,8 @@ export function summarizeParticipants(window) {
         } else {
             byUser.set(visit.userId, {
                 userId: visit.userId,
-                displayName: visit.displayName,
+                displayName:
+                    displayNames.get(visit.userId) ?? visit.userId,
                 joinedAt: visit.joinedAt,
                 leftAt: visit.leftAt
             });

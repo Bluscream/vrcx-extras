@@ -23,6 +23,16 @@ function readAccessType(location) {
     return 'Public';
 }
 
+/**
+ * Identity of an instance, independent of the tags trailing it. The same
+ * instance is recorded with different `~nonce(...)` values (and sometimes
+ * different region tags) depending on which source and which user observed it,
+ * so the raw location string cannot be used to group co-presence.
+ */
+export function instanceKey(location) {
+    return location.split('~')[0];
+}
+
 export function parseLocation(location) {
     if (!isInstanceLocation(location)) {
         return { worldId: '', instanceId: '', accessType: 'Private' };

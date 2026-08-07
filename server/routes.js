@@ -1,10 +1,15 @@
 import { Router } from 'express';
 
-import { getDb, queryAll, resolveDbPath } from './db.js';
-import { getDirectory, searchDirectory } from './directory.js';
-import { isInstanceLocation, parseLocation } from './location.js';
+import { getDb, resolveDbPath } from './db.js';
+import {
+    getDirectory,
+    getDisplayNames,
+    searchDirectory
+} from './directory.js';
+import { parseLocation } from './location.js';
 import { findSimultaneousWindows, summarizeParticipants } from './overlap.js';
-import { getOwnerPrefix, tableExists } from './schema.js';
+import { readPresence } from './presence.js';
+import { getOwnerPrefix } from './schema.js';
 
 const MAX_PLAYER_RESULTS = 50;
 const MAX_TARGET_USERS = 10;
@@ -57,65 +62,6 @@ router.get(
     })
 );
 
-/**
- * Reads each target user's instance visits as [arrival, next arrival) windows.
- *
- * A GPS row records that the user *arrived* at `location` at `created_at`; the
- * row's `time` column is how long they spent at `previous_location`, so it must
- * not be used to date this row's stay. The user leaves when their next GPS row
- * fires — including rows for 'private'/'offline'/'traveling', which is why the
- * window function runs before any location filtering.
- */
-async function readVisits(db, table, targetIds) {
-    const placeholders = targetIds.map(() => '?').join(', ');
-    const rows = await queryAll(
-        db,
-        `SELECT user_id, display_name, location, world_name,
-                created_at AS joined_at,
-                LEAD(created_at) OVER (
-                    PARTITION BY user_id ORDER BY created_at
-                ) AS left_at
-         FROM ${table}
-         WHERE user_id IN (${placeholders})`,
-        targetIds
-    );
-
-    const now = Date.now();
-    /** @type {Map<string, Map<string, object[]>>} location -> user -> visits */
-    const byLocation = new Map();
-
-    for (const row of rows) {
-        if (!isInstanceLocation(row.location)) {
-            continue;
-        }
-
-        const joinedAt = Date.parse(row.joined_at);
-        // A null `left_at` is the user's most recent row: still there.
-        const leftAt = row.left_at ? Date.parse(row.left_at) : now;
-        if (!Number.isFinite(joinedAt) || !Number.isFinite(leftAt)) {
-            continue;
-        }
-
-        let users = byLocation.get(row.location);
-        if (!users) {
-            users = new Map();
-            byLocation.set(row.location, users);
-        }
-
-        const visits = users.get(row.user_id) ?? [];
-        visits.push({
-            userId: row.user_id,
-            displayName: row.display_name || row.user_id,
-            worldName: row.world_name || '',
-            joinedAt,
-            leftAt: Math.max(leftAt, joinedAt)
-        });
-        users.set(row.user_id, visits);
-    }
-
-    return byLocation;
-}
-
 router.get(
     '/find-links',
     asyncRoute(async (req, res) => {
@@ -128,39 +74,32 @@ router.get(
 
         const db = await getDb();
         const prefix = await getOwnerPrefix(db);
-        const table = `${prefix}_feed_gps`;
-        if (!prefix || !(await tableExists(db, table))) {
-            res.json([]);
-            return;
-        }
-
-        const byLocation = await readVisits(db, table, targetIds);
+        const buckets = await readPresence(db, prefix, targetIds);
+        const names = await getDisplayNames(db, prefix, targetIds);
 
         const sessions = [];
 
-        for (const [location, visitsByUser] of byLocation) {
+        for (const bucket of buckets.values()) {
             // Every selected user must have been present — a "link" between
             // three people is not two of them meeting.
-            if (visitsByUser.size !== targetIds.length) {
+            if (bucket.byUser.size !== targetIds.length) {
                 continue;
             }
 
-            const info = parseLocation(location);
-            const worldName =
-                visitsByUser.values().next().value?.[0]?.worldName ?? '';
+            const info = parseLocation(bucket.location);
 
             for (const window of findSimultaneousWindows(
-                visitsByUser,
+                bucket.byUser,
                 targetIds
             )) {
                 sessions.push({
-                    location,
+                    location: bucket.location,
                     ...info,
-                    worldName,
+                    worldName: bucket.worldName,
                     joinedAt: window.start,
                     leftAt: window.end,
                     durationMs: window.end - window.start,
-                    participants: summarizeParticipants(window)
+                    participants: summarizeParticipants(window, names)
                 });
             }
         }
