@@ -35,17 +35,18 @@ const accessTypeStyles: Record<AccessType, string> = {
 };
 
 type ColumnKey =
-    | 'world'
-    | 'access'
     | 'instance'
+    | 'access'
     | 'duration'
     | 'joinedAt'
     | 'players';
 
 const accessors: SortAccessors<OverlappingSession, ColumnKey> = {
-    world: (session) => session.worldName || session.worldId,
+    // World first, then instance id, so repeat visits to one world group
+    // together instead of being interleaved by whatever the previous sort was.
+    instance: (session) =>
+        `${session.worldName || session.worldId}\u0000${session.instanceId}`,
     access: (session) => session.accessType,
-    instance: (session) => session.instanceId,
     duration: (session) => session.durationMs,
     joinedAt: (session) => session.joinedAt,
     // Unknown rosters sort below every known count rather than as zero.
@@ -60,9 +61,8 @@ const defaultDirections: Partial<Record<ColumnKey, SortDirection>> = {
 };
 
 const columns: { key: ColumnKey; label: string; className?: string }[] = [
-    { key: 'world', label: 'World' },
-    { key: 'access', label: 'Access' },
     { key: 'instance', label: 'Instance' },
+    { key: 'access', label: 'Access' },
     { key: 'duration', label: 'Duration', className: 'text-right' },
     { key: 'joinedAt', label: 'When' },
     { key: 'players', label: 'Players', className: 'text-right' }
@@ -112,7 +112,7 @@ export function SessionTable({
     onCopy: (key: string, session: OverlappingSession) => void;
 }) {
     // Explicit type arguments: inferring from the `initial` literal would
-    // narrow the key type to just 'duration'.
+    // narrow the key type to just 'joinedAt'.
     const { sortedRows, sort, toggleSort } = useSortableRows<
         OverlappingSession,
         ColumnKey
@@ -181,12 +181,19 @@ export function SessionTable({
                         return (
                             <TableRow key={key}>
                                 <TableCell
-                                    className="max-w-64 truncate font-medium"
+                                    className="max-w-80 truncate"
                                     title={session.worldId}
                                 >
-                                    {session.worldName ||
-                                        session.worldId ||
-                                        'Unknown world'}
+                                    <span className="font-medium">
+                                        {session.worldName ||
+                                            session.worldId ||
+                                            'Unknown world'}
+                                    </span>
+                                    {session.instanceId ? (
+                                        <span className="text-muted-foreground ml-1.5 font-mono text-xs">
+                                            #{session.instanceId}
+                                        </span>
+                                    ) : null}
                                 </TableCell>
 
                                 <TableCell>
@@ -200,10 +207,6 @@ export function SessionTable({
                                     >
                                         {session.accessType}
                                     </Badge>
-                                </TableCell>
-
-                                <TableCell className="text-muted-foreground font-mono text-xs">
-                                    {session.instanceId || '—'}
                                 </TableCell>
 
                                 <TableCell className="text-right tabular-nums">
