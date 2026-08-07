@@ -1,6 +1,18 @@
 import type { Player } from '../shared/api.ts';
 import { queryAll } from './db.ts';
+import { foldName, foldQuery } from './fold.ts';
 import { tableExists } from './schema.ts';
+
+/**
+ * A player plus the ASCII forms their name can be found by. The keys are kept
+ * server-side rather than added to Player, since the UI never needs them and
+ * they would roughly double the payload of every search response.
+ */
+export interface DirectoryEntry {
+    player: Player;
+    /** Lowercased name, its folded forms, then the user id. */
+    keys: string[];
+}
 
 /**
  * The directory is rebuilt from ~500k feed rows, so it is cached rather than
@@ -9,7 +21,7 @@ import { tableExists } from './schema.ts';
  */
 const CACHE_TTL_MS = 15_000;
 
-let cache: { entries: Player[]; builtAt: number } | null = null;
+let cache: { entries: DirectoryEntry[]; builtAt: number } | null = null;
 
 function blankEntry(id: string): Player {
     return {
@@ -46,7 +58,7 @@ function upsert(
     return entry;
 }
 
-function build(prefix: string): Player[] {
+function build(prefix: string): DirectoryEntry[] {
     const entries = new Map<string, Player>();
     const table = (suffix: string) => `${prefix}${suffix}`;
 
@@ -198,10 +210,17 @@ function build(prefix: string): Player[] {
         }
     }
 
-    return [...entries.values()];
+    return [...entries.values()].map((player) => ({
+        player,
+        keys: [
+            player.displayName.toLowerCase(),
+            ...foldName(player.displayName),
+            player.id.toLowerCase()
+        ]
+    }));
 }
 
-export function getDirectory(prefix: string): Player[] {
+export function getDirectory(prefix: string): DirectoryEntry[] {
     if (cache && Date.now() - cache.builtAt < CACHE_TTL_MS) {
         return cache.entries;
     }
@@ -217,15 +236,28 @@ const MONTH_MS = 30 * 86_400_000;
  * the top, then breaks ties by recency. Moderation entries score too — a
  * blocked or muted user is still a user you know.
  */
-function score(entry: Player, query: string, now: number): number {
-    const name = entry.displayName.toLowerCase();
+function score(
+    { player: entry, keys }: DirectoryEntry,
+    queries: string[],
+    now: number
+): number {
     let value = 0;
 
-    if (query) {
-        if (name === query) value += 1000;
-        else if (name.startsWith(query)) value += 600;
-        else if (name.includes(query)) value += 300;
-        else value += 50; // matched on user id
+    if (queries.length > 0) {
+        // Best quality across every (query form, name form) pair. The raw name
+        // is keys[0], so an unstyled match still outranks a folded one of the
+        // same shape.
+        let best = 0;
+        for (const query of queries) {
+            for (const [index, key] of keys.entries()) {
+                if (!key.includes(query)) continue;
+                const quality =
+                    key === query ? 1000 : key.startsWith(query) ? 600 : 300;
+                // Later keys are less direct evidence than the raw name.
+                best = Math.max(best, quality - Math.min(index, 3) * 20);
+            }
+        }
+        value += best;
     }
 
     if (entry.isFavorite) value += 260;
@@ -249,30 +281,33 @@ function score(entry: Player, query: string, now: number): number {
 }
 
 export function searchDirectory(
-    entries: Player[],
+    entries: DirectoryEntry[],
     rawQuery: string,
     limit: number
 ): Player[] {
-    const query = rawQuery.trim().toLowerCase();
+    const queries = rawQuery.trim() ? foldQuery(rawQuery) : [];
     const now = Date.now();
 
-    const matches = query
-        ? entries.filter(
-              (entry) =>
-                  entry.displayName.toLowerCase().includes(query) ||
-                  entry.id.toLowerCase().includes(query)
-          )
-        : entries;
+    const matches =
+        queries.length > 0
+            ? entries.filter((entry) =>
+                  entry.keys.some((key) =>
+                      queries.some((query) => key.includes(query))
+                  )
+              )
+            : entries;
 
     return matches
-        .map((entry) => ({ entry, rank: score(entry, query, now) }))
+        .map((entry) => ({ entry, rank: score(entry, queries, now) }))
         .sort(
             (a, b) =>
                 b.rank - a.rank ||
-                a.entry.displayName.localeCompare(b.entry.displayName)
+                a.entry.player.displayName.localeCompare(
+                    b.entry.player.displayName
+                )
         )
         .slice(0, limit)
-        .map(({ entry }) => entry);
+        .map(({ entry }) => entry.player);
 }
 
 /**

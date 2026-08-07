@@ -54,7 +54,9 @@ router.get('/players', (req, res) => {
     // player records, so it bypasses ranking and preserves the given order.
     const ids = parseUserIds(req.query.ids);
     if (ids.length > 0) {
-        const byId = new Map(entries.map((entry) => [entry.id, entry]));
+        const byId = new Map(
+            entries.map((entry) => [entry.player.id, entry.player])
+        );
         const resolved = ids
             .map((id) => byId.get(id))
             .filter((entry): entry is Player => entry !== undefined);
