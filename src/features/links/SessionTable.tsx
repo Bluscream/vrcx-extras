@@ -20,7 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { AccessType, InstanceRoster, OverlappingSession } from '@/types';
 import { Badge } from '@/ui/badge';
-import { Button } from '@/ui/button';
+import { Button, buttonVariants } from '@/ui/button';
 import {
     Table,
     TableBody,
@@ -246,25 +246,42 @@ export function SessionTable({
                                                 <CopyIcon />
                                             )}
                                         </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon-sm"
+                                        {/*
+                                          * A real anchor, not a button that
+                                          * assigns location.href. Browsers
+                                          * treat a link click as user-initiated
+                                          * and hand the custom scheme to the OS;
+                                          * a scripted location assignment is
+                                          * frequently ignored without any error.
+                                          */}
+                                        <a
+                                            href={
+                                                session.worldId
+                                                    ? buildVrcxWorldUri(
+                                                          session.worldId
+                                                      )
+                                                    : undefined
+                                            }
                                             aria-label="Open world in VRCX"
+                                            aria-disabled={
+                                                !session.worldId || undefined
+                                            }
                                             title={
                                                 session.worldId
                                                     ? 'Open world in VRCX'
                                                     : 'World is unknown, cannot open in VRCX'
                                             }
-                                            disabled={!session.worldId}
-                                            onClick={() => {
-                                                window.location.href =
-                                                    buildVrcxWorldUri(
-                                                        session.worldId
-                                                    );
-                                            }}
+                                            className={cn(
+                                                buttonVariants({
+                                                    variant: 'ghost',
+                                                    size: 'icon-sm'
+                                                }),
+                                                !session.worldId &&
+                                                    'pointer-events-none opacity-50'
+                                            )}
                                         >
                                             <ExternalLinkIcon />
-                                        </Button>
+                                        </a>
                                     </div>
                                 </TableCell>
                             </TableRow>
