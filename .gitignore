@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+*.log
+
+# node-gyp artifacts from native deps
+.node-gyp/
+
+# Local Claude Code settings
+.claude/settings.local.json
