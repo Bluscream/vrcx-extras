@@ -133,7 +133,7 @@ export function LinkFinderPage() {
                         disabled={!canSearch}
                         onClick={() => void search(selected)}
                     >
-                        {isLoading ? <Spinner /> : <span aria-hidden>🔍</span>}
+                        {isLoading ? <Spinner /> : <SearchIcon />}
                         Search
                     </Button>
                 </CardContent>
