@@ -67,3 +67,106 @@ export interface DatabaseStatus {
     /** Owner-scoped table prefix, empty when no owner row could be resolved. */
     prefix: string;
 }
+
+export interface AltCandidate {
+    player: Player;
+    score: number;
+    reasons: string[];
+}
+
+export type SearchCategory = 'players' | 'worlds' | 'avatars' | 'instances' | 'pages';
+
+export interface SearchResultItem {
+    id: string;
+    category: SearchCategory;
+    title: string;
+    subtitle?: string;
+    imageUrl?: string;
+    targetUrl: string;
+}
+
+export interface UnifiedSearchResults {
+    players: SearchResultItem[];
+    worlds: SearchResultItem[];
+    avatars: SearchResultItem[];
+    instances: SearchResultItem[];
+    pages: SearchResultItem[];
+}
+
+export interface PlayerDetails {
+    player: Player;
+    pastNames: string[];
+    topCompanions: Array<{
+        userId: string;
+        displayName: string;
+        sharedInstances: number;
+    }>;
+    potentialAlts: AltCandidate[];
+}
+
+export interface WorldDetails {
+    id: string;
+    name: string;
+    authorId: string | null;
+    authorName: string | null;
+    description: string | null;
+    imageUrl: string | null;
+    thumbnailImageUrl: string | null;
+    releaseStatus: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+    version: number | null;
+    memo: string | null;
+    isFavorite: boolean;
+    favoriteGroup: string | null;
+    visitCount: number;
+    lastVisitedAt: number | null;
+    recentVisits: Array<{
+        location: string;
+        createdAt: string;
+    }>;
+}
+
+export interface AvatarDetails {
+    id: string;
+    name: string;
+    authorId: string | null;
+    authorName: string | null;
+    description: string | null;
+    imageUrl: string | null;
+    thumbnailImageUrl: string | null;
+    releaseStatus: string | null;
+    createdAt: string | null;
+    updatedAt: string | null;
+    version: number | null;
+    memo: string | null;
+    isFavorite: boolean;
+    favoriteGroup: string | null;
+    tags: Array<{ tag: string; color: string }>;
+    usageHistoryCount: number;
+    lastUsedAt: string | null;
+}
+
+export interface InstanceDetails {
+    location: string;
+    worldId: string;
+    instanceId: string;
+    worldName: string;
+    accessType: AccessType;
+    groupName: string | null;
+    ownerId: string | null;
+    recordedVisits: number;
+    lastVisitedAt: string | null;
+    roster: InstanceRoster | null;
+}
+
+export interface EntityDetailsResponse {
+    type: 'player' | 'world' | 'avatar' | 'instance';
+    player?: PlayerDetails;
+    world?: WorldDetails;
+    avatar?: AvatarDetails;
+    instance?: InstanceDetails;
+}
+
+
+

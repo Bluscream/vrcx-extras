@@ -4,9 +4,19 @@
  */
 export type {
     AccessType,
+    AltCandidate,
+    AvatarDetails,
     DatabaseStatus,
+    EntityDetailsResponse,
+    InstanceDetails,
     InstanceRoster,
     OverlappingSession,
     Player,
-    SessionParticipant
-} from '../shared/api';
+    PlayerDetails,
+    SearchCategory,
+    SearchResultItem,
+    SessionParticipant,
+    UnifiedSearchResults,
+    WorldDetails
+} from '../shared/api.ts';
+

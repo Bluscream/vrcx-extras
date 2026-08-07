@@ -11,6 +11,8 @@ export const navRoutes: NavRoute[] = [
     { path: '/player-links', label: 'Instance Links', icon: LinkIcon }
 ];
 
+
+
 export const defaultRoute = navRoutes[0].path;
 
 /** Query parameter carrying pre-selected user ids on the links route. */

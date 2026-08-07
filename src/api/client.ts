@@ -1,4 +1,4 @@
-import type { DatabaseStatus, OverlappingSession, Player } from '@/types';
+import type { DatabaseStatus, EntityDetailsResponse, OverlappingSession, Player, UnifiedSearchResults } from '@/types';
 
 export class ApiError extends Error {
     constructor(
@@ -45,6 +45,16 @@ export function resolvePlayers(ids: string[], signal?: AbortSignal) {
     return request<Player[]>('players', { ids: ids.join(',') }, signal);
 }
 
+export function fetchEntityDetails(id: string, signal?: AbortSignal) {
+    return request<EntityDetailsResponse>('entity-details', { id }, signal);
+}
+
+
+export function unifiedSearch(query: string, signal?: AbortSignal) {
+    return request<UnifiedSearchResults>('search', { q: query }, signal);
+}
+
+
 export function findLinks(userIds: string[], signal?: AbortSignal) {
     return request<OverlappingSession[]>(
         'find-links',
@@ -61,3 +71,4 @@ export function isAbortError(error: unknown) {
 export function toErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
 }
+

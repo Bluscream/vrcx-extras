@@ -12,6 +12,7 @@ import { findSimultaneousWindows, summarizeParticipants } from './overlap.ts';
 import { readPresence } from './presence.ts';
 import { readRosters } from './roster.ts';
 import { getOwnerPrefix } from './schema.ts';
+import { performUnifiedSearch } from './search.ts';
 
 const MAX_PLAYER_RESULTS = 50;
 const MAX_TARGET_USERS = 10;
@@ -68,6 +69,34 @@ router.get('/players', (req, res) => {
         searchDirectory(entries, String(req.query.q ?? ''), MAX_PLAYER_RESULTS)
     );
 });
+
+import { getEntityDetails } from './entities.ts';
+
+router.get('/entity-details', (req, res) => {
+    const id = String(req.query.id ?? '').trim();
+    if (!id) {
+        res.status(400).json({ error: 'Missing id parameter' });
+        return;
+    }
+
+    const prefix = getOwnerPrefix();
+    const details = getEntityDetails(prefix, id);
+    if (!details) {
+        res.status(404).json({ error: 'Entity not found' });
+        return;
+    }
+
+    res.json(details);
+});
+
+
+router.get('/search', (req, res) => {
+    const prefix = getOwnerPrefix();
+    const query = String(req.query.q ?? '');
+    res.json(performUnifiedSearch(prefix, query));
+});
+
+
 
 router.get('/find-links', (req, res) => {
     const targetIds = parseUserIds(req.query.user_ids);

@@ -76,7 +76,9 @@ const SHAPE_ALIKE: Record<string, string> = {
     壬: 'F',
     干: 'F',
     正: 'F',
-    上: 'L'
+    上: 'L',
+    '¥': 'Y',
+    '￥': 'Y'
 };
 
 /** Reduces to the characters a search can meaningfully compare. */

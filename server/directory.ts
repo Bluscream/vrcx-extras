@@ -210,6 +210,37 @@ function build(prefix: string): DirectoryEntry[] {
         }
     }
 
+    // Ingest game log joins for non-friend users who never appear in VRCX feed tables
+    if (tableExists('gamelog_join_leave')) {
+        for (const record of queryAll(
+            `SELECT user_id, display_name, MAX(created_at) AS last_seen, COUNT(*) AS hits
+             FROM gamelog_join_leave
+             WHERE user_id IS NOT NULL AND user_id != ''
+             GROUP BY user_id`,
+            [],
+            (row) => ({
+                userId: row.nonEmptyText('user_id'),
+                displayName: row.nonEmptyText('display_name'),
+                lastSeen: row.timestampOrNull('last_seen'),
+                hits: row.numberOrNull('hits') ?? 0
+            })
+        )) {
+            if (!record.userId) continue;
+            const entry = upsert(entries, record.userId, record.displayName);
+            if (entry) {
+                if (record.displayName && (!entry.displayName || entry.displayName === entry.id)) {
+                    entry.displayName = record.displayName;
+                }
+                if (record.lastSeen && (!entry.lastSeen || record.lastSeen > entry.lastSeen)) {
+                    entry.lastSeen = record.lastSeen;
+                }
+                if (entry.sessionCount === 0) {
+                    entry.sessionCount = record.hits;
+                }
+            }
+        }
+    }
+
     return [...entries.values()].map((player) => ({
         player,
         keys: [
