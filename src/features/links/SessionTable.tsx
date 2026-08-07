@@ -88,7 +88,7 @@ export function SessionTable({
     >(
         sessions,
         accessors,
-        { key: 'duration', direction: 'desc' },
+        { key: 'joinedAt', direction: 'desc' },
         defaultDirections
     );
 
