@@ -25,7 +25,7 @@ import { Input } from '@/ui/input';
 import { Spinner } from '@/ui/spinner';
 
 import { PlayerPicker } from './PlayerPicker';
-import { SessionCard } from './SessionCard';
+import { SessionTable } from './SessionTable';
 import { SessionStats } from './SessionStats';
 
 function matchesFilter(session: OverlappingSession, needle: string) {
@@ -184,26 +184,18 @@ export function LinkFinderPage() {
                         <EmptyDescription>
                             {results && results.length > 0
                                 ? 'No session matches the current filter.'
-                                : 'These players were never in the same instance during the selected range.'}
+                                : 'These players were never recorded in the same instance.'}
                         </EmptyDescription>
                     </div>
                 </Empty>
             ) : (
-                <div className="flex flex-col gap-2">
-                    {filteredResults.map((session) => {
-                        const key = `${session.location}-${session.joinedAt}`;
-                        return (
-                            <SessionCard
-                                key={key}
-                                session={session}
-                                isCopied={copiedKey === key}
-                                onCopy={() =>
-                                    copy(key, buildLaunchUri(session.location))
-                                }
-                            />
-                        );
-                    })}
-                </div>
+                <SessionTable
+                    sessions={filteredResults}
+                    copiedKey={copiedKey}
+                    onCopy={(key, session) =>
+                        copy(key, buildLaunchUri(session.location))
+                    }
+                />
             )}
         </div>
     );

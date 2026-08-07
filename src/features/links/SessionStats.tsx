@@ -5,6 +5,7 @@ import {
     formatDuration,
     formatPreciseDuration
 } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { OverlappingSession } from '@/types';
 import { Card, CardContent } from '@/ui/card';
 
@@ -36,17 +37,22 @@ function summarize(sessions: OverlappingSession[]) {
 function Stat({
     label,
     value,
-    hint
+    hint,
+    emphasis = false
 }: {
     label: string;
     value: string;
     hint?: string;
+    emphasis?: boolean;
 }) {
     return (
         <div className="min-w-0">
             <dt className="text-muted-foreground text-xs">{label}</dt>
             <dd
-                className="font-heading truncate text-sm font-medium"
+                className={cn(
+                    'font-heading truncate font-medium',
+                    emphasis ? 'text-base tabular-nums' : 'text-sm'
+                )}
                 title={hint ?? value}
             >
                 {value}
@@ -68,17 +74,18 @@ export function SessionStats({
 
     return (
         <Card size="sm">
-            <CardContent className="space-y-3">
-                <div>
-                    <p className="text-muted-foreground text-xs">
-                        Total time spent together
-                    </p>
-                    <p className="font-heading text-2xl font-medium tabular-nums">
-                        {formatPreciseDuration(stats.totalMs)}
-                    </p>
-                </div>
-
-                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+            <CardContent>
+                {/*
+                  * The total leads the row and is given more column width,
+                  * since it is the headline figure but reads as part of the
+                  * same set as the counts beside it.
+                  */}
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4 xl:grid-cols-[1.6fr_repeat(6,1fr)]">
+                    <Stat
+                        label="Total time together"
+                        value={formatPreciseDuration(stats.totalMs)}
+                        emphasis
+                    />
                     <Stat
                         label="Sessions"
                         value={String(stats.sessionCount)}

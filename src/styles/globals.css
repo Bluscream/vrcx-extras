@@ -68,6 +68,16 @@
         var(--background) 95%,
         transparent
     );
+    --vrcx-0-table-surface: color-mix(
+        in oklch,
+        var(--background) 99%,
+        var(--foreground)
+    );
+    --vrcx-0-table-header-surface: color-mix(
+        in oklch,
+        var(--background) 94%,
+        var(--foreground)
+    );
 }
 
 .dark {
@@ -214,6 +224,14 @@
 
     .vrcx-0-statusbar {
         background: var(--vrcx-0-statusbar-surface);
+    }
+
+    .vrcx-0-data-table {
+        background: var(--vrcx-0-table-surface);
+    }
+
+    .vrcx-0-table-header {
+        background: var(--vrcx-0-table-header-surface);
     }
 
     i.x-status-icon {
