@@ -8,7 +8,7 @@ if [ ! -d "dist" ]; then
     npm run build
 fi
 
-node server.js &
+node --disable-warning=ExperimentalWarning server.ts &
 SERVER_PID=$!
 
 sleep 1.5

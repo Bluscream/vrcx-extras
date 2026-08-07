@@ -1,9 +1,23 @@
+import type { SessionParticipant } from '../shared/api.ts';
+
+export interface Visit {
+    userId: string;
+    joinedAt: number;
+    leftAt: number;
+}
+
+export interface Interval {
+    start: number;
+    end: number;
+    visits: Visit[];
+}
+
 /**
  * Intersects two sorted, non-overlapping interval lists.
  * Both inputs must be sorted by `start`.
  */
-function intersectIntervals(a, b) {
-    const out = [];
+function intersectIntervals(a: Interval[], b: Interval[]): Interval[] {
+    const out: Interval[] = [];
     let i = 0;
     let j = 0;
 
@@ -12,11 +26,7 @@ function intersectIntervals(a, b) {
         const end = Math.min(a[i].end, b[j].end);
 
         if (end > start) {
-            out.push({
-                start,
-                end,
-                visits: [...a[i].visits, ...b[j].visits]
-            });
+            out.push({ start, end, visits: [...a[i].visits, ...b[j].visits] });
         }
 
         // Advance whichever interval ends first — it cannot overlap anything
@@ -32,9 +42,9 @@ function intersectIntervals(a, b) {
 }
 
 /** Merges touching/overlapping visits by one user into disjoint intervals. */
-function toMergedIntervals(visits) {
+function toMergedIntervals(visits: Visit[]): Interval[] {
     const sorted = [...visits].sort((x, y) => x.joinedAt - y.joinedAt);
-    const merged = [];
+    const merged: Interval[] = [];
 
     for (const visit of sorted) {
         const last = merged[merged.length - 1];
@@ -55,23 +65,25 @@ function toMergedIntervals(visits) {
 
 /**
  * Finds every window during which *all* of `userIds` were simultaneously
- * present, given each user's visits to a single location.
- *
- * The previous implementation only ever looked at each user's first visit to a
- * location, so a second meetup in the same world was never reported.
+ * present, given each user's visits to a single instance.
  */
-export function findSimultaneousWindows(visitsByUser, userIds) {
-    if (userIds.some((id) => !visitsByUser.get(id)?.length)) {
+export function findSimultaneousWindows(
+    visitsByUser: Map<string, Visit[]>,
+    userIds: string[]
+): Interval[] {
+    const first = visitsByUser.get(userIds[0]);
+    if (!first?.length) {
         return [];
     }
 
-    let windows = toMergedIntervals(visitsByUser.get(userIds[0]));
+    let windows = toMergedIntervals(first);
 
     for (const userId of userIds.slice(1)) {
-        windows = intersectIntervals(
-            windows,
-            toMergedIntervals(visitsByUser.get(userId))
-        );
+        const visits = visitsByUser.get(userId);
+        if (!visits?.length) {
+            return [];
+        }
+        windows = intersectIntervals(windows, toMergedIntervals(visits));
         if (windows.length === 0) {
             return [];
         }
@@ -81,8 +93,11 @@ export function findSimultaneousWindows(visitsByUser, userIds) {
 }
 
 /** One representative participant entry per user for a given window. */
-export function summarizeParticipants(window, displayNames = new Map()) {
-    const byUser = new Map();
+export function summarizeParticipants(
+    window: Interval,
+    displayNames: Map<string, string> = new Map()
+): SessionParticipant[] {
+    const byUser = new Map<string, SessionParticipant>();
 
     for (const visit of window.visits) {
         const existing = byUser.get(visit.userId);
@@ -92,8 +107,7 @@ export function summarizeParticipants(window, displayNames = new Map()) {
         } else {
             byUser.set(visit.userId, {
                 userId: visit.userId,
-                displayName:
-                    displayNames.get(visit.userId) ?? visit.userId,
+                displayName: displayNames.get(visit.userId) ?? visit.userId,
                 joinedAt: visit.joinedAt,
                 leftAt: visit.leftAt
             });

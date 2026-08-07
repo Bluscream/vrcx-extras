@@ -1,10 +1,10 @@
-import express from 'express';
+import express, { type ErrorRequestHandler } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { closeDb, resolveDbPath } from './server/db.js';
-import { router } from './server/routes.js';
+import { closeDb, resolveDbPath } from './server/db.ts';
+import { router } from './server/routes.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8990);
@@ -20,14 +20,17 @@ app.use('/api', (_req, res) => {
     res.status(404).json({ error: 'Unknown API endpoint' });
 });
 
-app.use('/api', (err, _req, res, _next) => {
+const apiErrorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     console.error('[!] API error:', err);
-    res.status(500).json({ error: err.message ?? 'Internal server error' });
-});
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    res.status(500).json({ error: message });
+};
+app.use('/api', apiErrorHandler);
 
 const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
+    // Client-side routes such as /player-links must fall through to the SPA.
     app.get('*', (_req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
     });
@@ -40,8 +43,11 @@ const server = app.listen(PORT, HOST, () => {
     console.log(`[*] DB path: ${resolveDbPath()}`);
 });
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {
-        server.close(() => closeDb().then(() => process.exit(0)));
+        server.close(() => {
+            closeDb();
+            process.exit(0);
+        });
     });
 }

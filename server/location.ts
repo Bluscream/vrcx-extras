@@ -1,3 +1,5 @@
+import type { AccessType } from '../shared/api.ts';
+
 /** Feed values that mean "not in a joinable instance". */
 const NON_INSTANCE_LOCATIONS = new Set([
     '',
@@ -6,8 +8,8 @@ const NON_INSTANCE_LOCATIONS = new Set([
     'private'
 ]);
 
-export function isInstanceLocation(location) {
-    return Boolean(location) && !NON_INSTANCE_LOCATIONS.has(location);
+export function isInstanceLocation(location: string | null): location is string {
+    return Boolean(location) && !NON_INSTANCE_LOCATIONS.has(location as string);
 }
 
 /**
@@ -15,7 +17,7 @@ export function isInstanceLocation(location) {
  * `~hidden` is Friends+ while `~friends` is Friends-only, and a group instance
  * carries both `~group` and a `~groupAccessType` tag.
  */
-function readAccessType(location) {
+function readAccessType(location: string): AccessType {
     if (location.includes('~private')) return 'Private';
     if (location.includes('~group')) return 'Group';
     if (location.includes('~hidden')) return 'Friends+';
@@ -29,15 +31,20 @@ function readAccessType(location) {
  * different region tags) depending on which source and which user observed it,
  * so the raw location string cannot be used to group co-presence.
  */
-export function instanceKey(location) {
+export function instanceKey(location: string): string {
     return location.split('~')[0];
 }
 
-export function parseLocation(location) {
+export interface ParsedLocation {
+    worldId: string;
+    instanceId: string;
+    accessType: AccessType;
+}
+
+export function parseLocation(location: string): ParsedLocation {
     if (!isInstanceLocation(location)) {
         return { worldId: '', instanceId: '', accessType: 'Private' };
     }
-
     const [worldId = '', rest = ''] = location.split(':');
     return {
         worldId,
