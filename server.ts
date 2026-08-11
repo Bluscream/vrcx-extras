@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { closeDb, resolveDbPath } from './server/db.ts';
+import { preloadRegistryBackups } from './server/registry.ts';
 import { router } from './server/routes.ts';
 
 import cors from 'cors';
@@ -51,6 +52,8 @@ if (fs.existsSync(distPath)) {
 const server = app.listen(PORT, HOST, () => {
     console.log(`[*] VRCX-Extras companion backend on http://${HOST}:${PORT}`);
     console.log(`[*] DB path: ${resolveDbPath()}`);
+    // Parse the backup blob now rather than on the first client request.
+    preloadRegistryBackups();
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

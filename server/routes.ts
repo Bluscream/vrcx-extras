@@ -14,8 +14,10 @@ import { readRosters } from './roster.ts';
 import { getOwnerPrefix } from './schema.ts';
 import { performUnifiedSearch } from './search.ts';
 import {
+    getCurrentProtonRegistry,
+    invalidateLiveRegistryCache,
+    invalidateRegistryBackupCache,
     readRegistryBackupsFromDb,
-    readCurrentProtonRegistry,
     restoreRegistryBackup,
     wipeProtonRegistry,
     updateProtonRegistryKey
@@ -120,6 +122,7 @@ router.post('/registry/reset', async (_req, res) => {
     try {
         console.log('[API] POST /api/registry/reset');
         const result = await wipeProtonRegistry();
+        invalidateLiveRegistryCache();
         res.json(result);
     } catch (err: any) {
         console.error('[API] Error in POST /api/registry/reset:', err);
@@ -136,6 +139,7 @@ router.post('/registry/update', async (req, res) => {
         }
         console.log(`[API] POST /api/registry/update key="${key}"`);
         const result = await updateProtonRegistryKey(key, value, type ?? 1);
+        invalidateLiveRegistryCache();
         res.json(result);
     } catch (err: any) {
         console.error('[API] Error in POST /api/registry/update:', err);
@@ -155,6 +159,8 @@ router.post('/db/mode', (req, res) => {
     try {
         const { readOnly } = req.body || {};
         const newMode = setDbReadOnly(Boolean(readOnly));
+        // The remount opens a fresh connection; drop snapshots read off the old one.
+        invalidateRegistryBackupCache();
         res.json({ readOnly: newMode });
     } catch (err: any) {
         res.status(500).json({ error: err?.message || 'Failed to change DB mode' });
@@ -165,7 +171,7 @@ router.get('/registry/backups', async (_req, res) => {
     try {
         console.log('[API] GET /api/registry/backups');
         const backups = readRegistryBackupsFromDb();
-        const currentLive = await readCurrentProtonRegistry();
+        const currentLive = await getCurrentProtonRegistry();
         const result = currentLive ? [currentLive, ...backups] : backups;
         res.json(result);
     } catch (err: any) {
@@ -179,6 +185,7 @@ router.post('/registry/backups/:index/restore', async (req, res) => {
         const index = parseInt(req.params.index, 10);
         console.log(`[API] POST /api/registry/backups/${index}/restore`);
         const result = await restoreRegistryBackup(index);
+        invalidateLiveRegistryCache();
         res.json(result);
     } catch (err: any) {
         console.error(`[API] Error in POST /api/registry/backups/${req.params.index}/restore:`, err);

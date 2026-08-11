@@ -61,6 +61,28 @@ function findWineBinary(): string | null {
     return found;
 }
 
+/**
+ * The live snapshot, cached because reading it spawns `wine reg query` and
+ * takes ~3s. Writes made through this server invalidate it immediately; the
+ * TTL only bounds how stale an edit made *outside* the app can be.
+ */
+const LIVE_REGISTRY_TTL_MS = 60_000;
+let cachedLive: { snapshot: RegistryBackupSnapshot | null; readAt: number } | null = null;
+
+export function invalidateLiveRegistryCache(): void {
+    cachedLive = null;
+}
+
+/** Cached read used by request handlers; falls through to a live query when stale. */
+export async function getCurrentProtonRegistry(): Promise<RegistryBackupSnapshot | null> {
+    if (cachedLive && Date.now() - cachedLive.readAt < LIVE_REGISTRY_TTL_MS) {
+        return cachedLive.snapshot;
+    }
+    const snapshot = await readCurrentProtonRegistry();
+    cachedLive = { snapshot, readAt: Date.now() };
+    return snapshot;
+}
+
 export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapshot | null> {
     console.log('[RegistryService] Querying current Proton registry via Wine CLI...');
     const prefix = findProtonPrefix();
@@ -250,7 +272,53 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
     return null;
 }
 
+/**
+ * Parsed backups, kept in memory between requests.
+ *
+ * VRCX stores every snapshot as one JSON blob in a single `configs` row, so a
+ * read is a multi-megabyte parse — far too slow to repeat on each poll of
+ * GET /api/registry/backups. Only VRCX itself writes that row, so the cache is
+ * refreshed at startup, whenever the database is remounted, and after any
+ * restore.
+ */
+let cachedBackups: RegistryBackupSnapshot[] | null = null;
+
+export function invalidateRegistryBackupCache(): void {
+    cachedBackups = null;
+}
+
+/**
+ * Warms both caches so the first client request pays neither the JSON parse
+ * nor the Wine query. Runs in the background; failures are logged and left for
+ * the route to re-attempt and report.
+ */
+export async function preloadRegistryBackups(): Promise<void> {
+    try {
+        const backups = loadRegistryBackupsFromDb();
+        cachedBackups = backups;
+        console.log(`[RegistryService] Preloaded ${backups.length} registry backups into memory.`);
+    } catch (err) {
+        // A missing or locked database must not stop the server from booting.
+        console.warn('[RegistryService] Could not preload registry backups:', err);
+    }
+
+    try {
+        const live = await getCurrentProtonRegistry();
+        console.log(`[RegistryService] Preloaded live registry snapshot (${live?.keyCount ?? 0} keys).`);
+    } catch (err) {
+        console.warn('[RegistryService] Could not preload live registry snapshot:', err);
+    }
+}
+
 export function readRegistryBackupsFromDb(): RegistryBackupSnapshot[] {
+    if (cachedBackups) {
+        return cachedBackups;
+    }
+    cachedBackups = loadRegistryBackupsFromDb();
+    return cachedBackups;
+}
+
+function loadRegistryBackupsFromDb(): RegistryBackupSnapshot[] {
     console.log('[RegistryService] Reading registry backups from SQLite database...');
     const db = getDb();
     const row = db.prepare(`SELECT value FROM configs WHERE key = 'config:vrcx_vrchatregistrybackups'`).get() as { value?: string } | undefined;
