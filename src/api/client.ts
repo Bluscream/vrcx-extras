@@ -63,6 +63,54 @@ export function findLinks(userIds: string[], signal?: AbortSignal) {
     );
 }
 
+export function fetchRegistryBackups(signal?: AbortSignal) {
+    return request<import('@/types').RegistryBackupSnapshot[]>('registry/backups', {}, signal);
+}
+
+export async function fetchDbMode(): Promise<{ readOnly: boolean }> {
+    const response = await fetch('/api/db/mode');
+    if (!response.ok) throw new ApiError('Failed to fetch DB mode', response.status);
+    return response.json();
+}
+
+export async function toggleDbMode(readOnly: boolean): Promise<{ readOnly: boolean }> {
+    const response = await fetch('/api/db/mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ readOnly })
+    });
+    if (!response.ok) throw new ApiError('Failed to toggle DB mode', response.status);
+    return response.json();
+}
+
+export async function resetRegistry(): Promise<{ success: boolean; message: string }> {
+    const response = await fetch('/api/registry/reset', {
+        method: 'POST'
+    });
+    if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new ApiError(payload?.error || 'Failed to reset VRChat registry', response.status);
+    }
+    return response.json();
+}
+
+export async function restoreRegistryBackup(index: number): Promise<{
+    success: boolean;
+    message: string;
+    verifiedCount: number;
+    missingKeys: string[];
+    extraKeys: string[];
+}> {
+    const response = await fetch(`/api/registry/backups/${index}/restore`, {
+        method: 'POST'
+    });
+    if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new ApiError(payload?.error || 'Failed to restore backup', response.status);
+    }
+    return response.json();
+}
+
 /** AbortError is a cancellation, not a failure worth showing the user. */
 export function isAbortError(error: unknown) {
     return error instanceof DOMException && error.name === 'AbortError';

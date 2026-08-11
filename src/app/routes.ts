@@ -1,4 +1,4 @@
-import { LinkIcon, type LucideIcon } from 'lucide-react';
+import { LinkIcon, DatabaseIcon, type LucideIcon } from 'lucide-react';
 
 export interface NavRoute {
     path: string;
@@ -8,7 +8,8 @@ export interface NavRoute {
 
 /** Sidebar entries, in display order. Also drives route registration. */
 export const navRoutes: NavRoute[] = [
-    { path: '/player-links', label: 'Instance Links', icon: LinkIcon }
+    { path: '/player-links', label: 'Instance Links', icon: LinkIcon },
+    { path: '/registry', label: 'Proton Registry', icon: DatabaseIcon }
 ];
 
 

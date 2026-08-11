@@ -13,6 +13,8 @@ export type {
     OverlappingSession,
     Player,
     PlayerDetails,
+    RegistryBackupSnapshot,
+    RegistryEntry,
     SearchCategory,
     SearchResultItem,
     SessionParticipant,

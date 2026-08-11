@@ -37,6 +37,16 @@ export function AppShellLayout() {
     const [dbError, setDbError] = useState<string | null>(null);
     const [resultCount, setResultCount] = useState<number | null>(null);
 
+    const refreshDbStatus = useCallback(() => {
+        fetchDatabaseStatus()
+            .then(setDbStatus)
+            .catch((cause) => {
+                if (!isAbortError(cause)) {
+                    setDbError(toErrorMessage(cause));
+                }
+            });
+    }, []);
+
     useEffect(() => {
         const controller = new AbortController();
         fetchDatabaseStatus(controller.signal)
@@ -56,7 +66,7 @@ export function AppShellLayout() {
 
     return (
         <div className="vrcx-0-app-root flex h-full flex-col">
-            <AppTitleBar theme={theme} onToggleTheme={toggleTheme} />
+            <AppTitleBar theme={theme} onToggleTheme={toggleTheme} onDbStatusChange={refreshDbStatus} />
 
             <div className="flex min-h-0 flex-1">
                 <AppSidebar />

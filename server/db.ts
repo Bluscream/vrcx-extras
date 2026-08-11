@@ -29,11 +29,27 @@ export function resolveDbPath(): string {
 }
 
 let connection: DatabaseSync | null = null;
+let isReadOnlyMode = true;
 
-/**
- * Opens a single shared read-only handle. node:sqlite is synchronous, so there
- * is no connection pool to manage and no promise wrapper around each query.
- */
+export function isDbReadOnly(): boolean {
+    return isReadOnlyMode;
+}
+
+export function setDbReadOnly(readOnly: boolean): boolean {
+    if (connection) {
+        connection.close();
+        connection = null;
+    }
+    isReadOnlyMode = readOnly;
+    const dbPath = resolveDbPath();
+    if (!fs.existsSync(dbPath)) {
+        throw new Error(`VRCX database not found at ${dbPath}`);
+    }
+    connection = new DatabaseSync(dbPath, { readOnly });
+    console.log(`[DB] Database remounted cleanly: readOnly = ${readOnly}`);
+    return isReadOnlyMode;
+}
+
 export function getDb(): DatabaseSync {
     if (connection) {
         return connection;
@@ -42,7 +58,7 @@ export function getDb(): DatabaseSync {
     if (!fs.existsSync(dbPath)) {
         throw new Error(`VRCX database not found at ${dbPath}`);
     }
-    connection = new DatabaseSync(dbPath, { readOnly: true });
+    connection = new DatabaseSync(dbPath, { readOnly: isReadOnlyMode });
     return connection;
 }
 

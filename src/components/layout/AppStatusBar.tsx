@@ -12,10 +12,13 @@ export function AppStatusBar({
     resultCount: number | null;
 }) {
     const connected = status?.connected ?? false;
+    const isRO = status?.readOnly ?? true;
     const label = error
         ? 'Database unavailable'
         : connected
-          ? 'SQLite · read-only'
+          ? isRO
+              ? 'SQLite · read-only'
+              : 'SQLite · read-write (shared)'
           : 'Connecting…';
 
     return (

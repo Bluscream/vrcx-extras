@@ -1,8 +1,8 @@
-import { GlobeIcon, FileTextIcon, MoonIcon, SearchIcon, SunIcon, UserIcon, BoxIcon, CompassIcon, LayersIcon } from 'lucide-react';
+import { GlobeIcon, FileTextIcon, MoonIcon, SearchIcon, SunIcon, UserIcon, BoxIcon, CompassIcon, LayersIcon, LockIcon, UnlockIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
-import { isAbortError, unifiedSearch } from '@/api/client';
+import { isAbortError, unifiedSearch, fetchDbMode, toggleDbMode } from '@/api/client';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import type { SearchResultItem, UnifiedSearchResults } from '@/types';
 import { Button } from '@/ui/button';
@@ -28,10 +28,12 @@ function getCategoryIcon(category: string) {
 
 export function AppTitleBar({
     theme,
-    onToggleTheme
+    onToggleTheme,
+    onDbStatusChange
 }: {
     theme: 'light' | 'dark';
     onToggleTheme: () => void;
+    onDbStatusChange?: () => void;
 }) {
     const ThemeIcon = theme === 'dark' ? SunIcon : MoonIcon;
     const navigate = useNavigate();
@@ -41,8 +43,30 @@ export function AppTitleBar({
     const [isOpen, setIsOpen] = useState(false);
     const [results, setResults] = useState<UnifiedSearchResults | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isReadOnly, setIsReadOnly] = useState(true);
+    const [isTogglingDb, setIsTogglingDb] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // Fetch initial DB mode
+    useEffect(() => {
+        fetchDbMode()
+            .then((res) => setIsReadOnly(res.readOnly))
+            .catch(() => setIsReadOnly(true));
+    }, []);
+
+    const handleToggleDbMode = async () => {
+        setIsTogglingDb(true);
+        try {
+            const res = await toggleDbMode(!isReadOnly);
+            setIsReadOnly(res.readOnly);
+            onDbStatusChange?.();
+        } catch (err) {
+            console.error('Failed to toggle DB mode:', err);
+        } finally {
+            setIsTogglingDb(false);
+        }
+    };
 
     // Global keyboard shortcut Ctrl+K or / to focus search
     useEffect(() => {
@@ -134,41 +158,59 @@ export function AppTitleBar({
                 Companion
             </span>
 
-            {/* Quick Global Search Bar placed on the right side next to theme toggle */}
+            {/* Quick Global Search Bar - Expanding smooth pill input */}
             <div className="ml-auto flex items-center gap-2">
-                <div ref={containerRef} className="relative w-64 max-w-xs">
-                    <div className="border-input bg-background/50 focus-within:border-ring flex h-6 items-center rounded-md border px-1.5 transition-colors">
-                        <SearchIcon className="text-muted-foreground mr-1 size-3 shrink-0" />
-                        <Input
-                            ref={inputRef}
-                            type="text"
-                            placeholder="Search everything... (Ctrl+K)"
-                            value={query}
-                            onChange={(e) => {
-                                setQuery(e.target.value);
+                <div ref={containerRef} className="relative flex items-center justify-end">
+                    {isOpen || query.length > 0 ? (
+                        <div className="group relative flex h-7 w-64 items-center rounded-full border border-primary/50 bg-background/90 px-2.5 shadow-xs backdrop-blur-md ring-2 ring-primary/20 transition-all duration-300">
+                            <SearchIcon className="size-3.5 shrink-0 text-primary" />
+                            <Input
+                                ref={inputRef}
+                                type="text"
+                                placeholder="Search... (Ctrl+K)"
+                                value={query}
+                                autoFocus
+                                onChange={(e) => {
+                                    setQuery(e.target.value);
+                                    setIsOpen(true);
+                                }}
+                                onFocus={() => setIsOpen(true)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && query.trim()) {
+                                        setIsOpen(false);
+                                        navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+                                    } else if (e.key === 'Escape') {
+                                        setIsOpen(false);
+                                        inputRef.current?.blur();
+                                    }
+                                }}
+                                className="h-full border-0 bg-transparent px-2 text-xs focus-visible:ring-0"
+                            />
+                            {isLoading && <Spinner className="size-3 shrink-0" />}
+                        </div>
+                    ) : (
+                        <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="Search"
+                            title="Search everything... (Ctrl+K)"
+                            onClick={() => {
                                 setIsOpen(true);
+                                setTimeout(() => inputRef.current?.focus(), 50);
                             }}
-                            onFocus={() => setIsOpen(true)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' && query.trim()) {
-                                    setIsOpen(false);
-                                    navigate(`/search?q=${encodeURIComponent(query.trim())}`);
-                                } else if (e.key === 'Escape') {
-                                    setIsOpen(false);
-                                }
-                            }}
-                            className="h-full border-0 bg-transparent px-0 text-xs focus-visible:ring-0"
-                        />
-                        {isLoading && <Spinner className="size-3 shrink-0" />}
-                    </div>
+                            className="rounded-full text-muted-foreground hover:text-foreground hover:bg-accent/80 transition-all"
+                        >
+                            <SearchIcon className="size-3.5" />
+                        </Button>
+                    )}
 
                     {isOpen && (query.trim() || hasResults) ? (
-                        <div className="bg-popover text-popover-foreground ring-foreground/10 animate-in fade-in-0 zoom-in-95 absolute top-full right-0 z-50 mt-1 max-h-80 w-80 overflow-y-auto rounded-lg p-1.5 shadow-md ring-1">
+                        <div className="bg-popover/95 text-popover-foreground ring-foreground/10 animate-in fade-in-0 zoom-in-95 backdrop-blur-xl absolute top-full right-0 z-50 mt-1.5 max-h-80 w-80 overflow-y-auto rounded-xl p-2 shadow-xl ring-1 border">
                             {hasResults ? (
                                 <div className="flex flex-col gap-2">
                                     {categories.map((cat) => (
                                         <div key={cat.title}>
-                                            <div className="text-muted-foreground px-2 py-1 text-[0.65rem] font-semibold tracking-wider uppercase">
+                                            <div className="text-muted-foreground px-2 py-1 text-[0.65rem] font-bold tracking-wider uppercase">
                                                 {cat.title}
                                             </div>
                                             {cat.items.map((item) => {
@@ -178,7 +220,7 @@ export function AppTitleBar({
                                                         key={item.id}
                                                         type="button"
                                                         onClick={() => handleSelect(item)}
-                                                        className="hover:bg-accent flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs outline-none"
+                                                        className="hover:bg-accent/80 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs outline-none transition-colors"
                                                     >
                                                         <Icon className="text-muted-foreground size-3.5 shrink-0" />
                                                         <div className="min-w-0 flex-1">
@@ -203,6 +245,23 @@ export function AppTitleBar({
                         </div>
                     ) : null}
                 </div>
+
+                {/* Glowing Lock Toggle Button */}
+                <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={isTogglingDb}
+                    aria-label={isReadOnly ? 'Database is Read-Only (Click to remount Read-Write)' : 'Database is Read-Write (Click to remount Read-Only)'}
+                    title={isReadOnly ? 'Database: Read-Only (Click to remount Read-Write shared)' : 'Database: Read-Write Shared (Click to remount Read-Only)'}
+                    onClick={handleToggleDbMode}
+                    className={`transition-all duration-300 ${
+                        isReadOnly
+                            ? 'text-emerald-500 hover:text-emerald-400 drop-shadow-[0_0_8px_rgba(16,185,129,0.7)]'
+                            : 'text-rose-500 hover:text-rose-400 drop-shadow-[0_0_8px_rgba(244,63,94,0.7)] animate-pulse'
+                    }`}
+                >
+                    {isReadOnly ? <LockIcon className="size-3.5" /> : <UnlockIcon className="size-3.5" />}
+                </Button>
 
                 <Button
                     variant="ghost"

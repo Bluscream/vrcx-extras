@@ -66,6 +66,7 @@ export interface DatabaseStatus {
     path: string;
     /** Owner-scoped table prefix, empty when no owner row could be resolved. */
     prefix: string;
+    readOnly?: boolean;
 }
 
 export interface AltCandidate {
@@ -167,6 +168,21 @@ export interface EntityDetailsResponse {
     avatar?: AvatarDetails;
     instance?: InstanceDetails;
 }
+
+export interface RegistryEntry {
+    type: number;
+    data: any;
+}
+
+export interface RegistryBackupSnapshot {
+    key: string;
+    index: number;
+    name: string;
+    date: string;
+    keyCount: number;
+    entries: Record<string, RegistryEntry>;
+}
+
 
 
 

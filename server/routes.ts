@@ -5,7 +5,7 @@ import type {
     OverlappingSession,
     Player
 } from '../shared/api.ts';
-import { resolveDbPath } from './db.ts';
+import { resolveDbPath, isDbReadOnly, setDbReadOnly } from './db.ts';
 import { getDirectory, getDisplayNames, searchDirectory } from './directory.ts';
 import { parseLocation } from './location.ts';
 import { findSimultaneousWindows, summarizeParticipants } from './overlap.ts';
@@ -13,6 +13,12 @@ import { readPresence } from './presence.ts';
 import { readRosters } from './roster.ts';
 import { getOwnerPrefix } from './schema.ts';
 import { performUnifiedSearch } from './search.ts';
+import {
+    readRegistryBackupsFromDb,
+    readCurrentProtonRegistry,
+    restoreRegistryBackup,
+    wipeProtonRegistry
+} from './registry.ts';
 
 const MAX_PLAYER_RESULTS = 50;
 const MAX_TARGET_USERS = 10;
@@ -30,6 +36,60 @@ function parseUserIds(raw: unknown): string[] {
 
 export const router = Router();
 
+router.post('/registry/reset', async (_req, res) => {
+    try {
+        console.log('[API] POST /api/registry/reset');
+        const result = await wipeProtonRegistry();
+        res.json(result);
+    } catch (err: any) {
+        console.error('[API] Error in POST /api/registry/reset:', err);
+        res.status(500).json({ error: err?.message || 'Failed to wipe registry' });
+    }
+});
+
+router.get('/db/mode', (_req, res) => {
+    try {
+        res.json({ readOnly: isDbReadOnly() });
+    } catch (err: any) {
+        res.status(500).json({ error: err?.message || 'Failed to check DB mode' });
+    }
+});
+
+router.post('/db/mode', (req, res) => {
+    try {
+        const { readOnly } = req.body || {};
+        const newMode = setDbReadOnly(Boolean(readOnly));
+        res.json({ readOnly: newMode });
+    } catch (err: any) {
+        res.status(500).json({ error: err?.message || 'Failed to change DB mode' });
+    }
+});
+
+router.get('/registry/backups', async (_req, res) => {
+    try {
+        console.log('[API] GET /api/registry/backups');
+        const backups = readRegistryBackupsFromDb();
+        const currentLive = await readCurrentProtonRegistry();
+        const result = currentLive ? [currentLive, ...backups] : backups;
+        res.json(result);
+    } catch (err: any) {
+        console.error('[API] Error in GET /api/registry/backups:', err);
+        res.status(500).json({ error: err?.message || 'Failed to read backups' });
+    }
+});
+
+router.post('/registry/backups/:index/restore', async (req, res) => {
+    try {
+        const index = parseInt(req.params.index, 10);
+        console.log(`[API] POST /api/registry/backups/${index}/restore`);
+        const result = await restoreRegistryBackup(index);
+        res.json(result);
+    } catch (err: any) {
+        console.error(`[API] Error in POST /api/registry/backups/${req.params.index}/restore:`, err);
+        res.status(500).json({ error: err?.message || 'Failed to restore backup' });
+    }
+});
+
 // node:sqlite is synchronous, so handlers are too. Express already funnels a
 // synchronous throw into the error middleware, so no async wrapper is needed.
 
@@ -37,7 +97,8 @@ router.get('/status', (_req, res) => {
     const status: DatabaseStatus = {
         connected: true,
         path: resolveDbPath(),
-        prefix: getOwnerPrefix()
+        prefix: getOwnerPrefix(),
+        readOnly: isDbReadOnly()
     };
     res.json(status);
 });
