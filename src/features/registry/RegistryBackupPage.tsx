@@ -14,7 +14,6 @@ import {
     XCircleIcon
 } from 'lucide-react';
 
-import { diffChars } from 'diff';
 import * as ReactWindowModule from 'react-window';
 
 const List: any = (ReactWindowModule as any).FixedSizeList || (ReactWindowModule as any).default?.FixedSizeList || (ReactWindowModule as any).default || ReactWindowModule;
@@ -58,11 +57,8 @@ const RegistryRow = memo(({ index, style, data }: { index: number; style: React.
     const rowTitle = def ? `[VRCOSC] ${def.description}${def.defaultValue ? ` (Default: ${def.defaultValue})` : ''}` : key;
 
     const isDifferent = data.isComparingWithCurrent && String(currentVal?.data ?? '') !== String(backupVal?.data ?? '');
-
     const cStr = String(currentVal?.data ?? '-');
     const bStr = String(backupVal?.data ?? '-');
-
-    const diff = useMemo(() => (isDifferent ? diffChars(cStr, bStr) : []), [isDifferent, cStr, bStr]);
 
     return (
         <div
@@ -150,30 +146,12 @@ const RegistryRow = memo(({ index, style, data }: { index: number; style: React.
                                     <XCircleIcon className="size-4" />
                                 </button>
                             </div>
-                        ) : isDifferent ? (
-                            <span className="truncate block font-mono text-xs" title={cStr}>
-                                {diff.filter((part) => !part.added).map((part, idx) => (
-                                    <span key={idx} className={part.removed ? 'bg-rose-500/30 text-rose-500 font-bold px-0.5 rounded' : ''}>
-                                        {part.value}
-                                    </span>
-                                ))}
-                            </span>
                         ) : (
-                            <span className="truncate block" title={cStr}>{cStr}</span>
+                            <span className={`truncate block font-mono text-xs ${isDifferent ? 'text-amber-500 font-medium' : ''}`} title={cStr}>{cStr}</span>
                         )}
                     </div>
                     <div className="flex-1 min-w-0 px-2.5 py-1.5 truncate text-foreground">
-                        {isDifferent ? (
-                            <span className="truncate block font-mono text-xs" title={bStr}>
-                                {diff.filter((part) => !part.removed).map((part, idx) => (
-                                    <span key={idx} className={part.added ? 'bg-emerald-500/30 text-emerald-500 dark:text-emerald-400 font-bold px-0.5 rounded' : ''}>
-                                        {part.value}
-                                    </span>
-                                ))}
-                            </span>
-                        ) : (
-                            <span className="truncate block" title={bStr}>{bStr}</span>
-                        )}
+                        <span className={`truncate block font-mono text-xs ${isDifferent ? 'text-emerald-500 dark:text-emerald-400 font-semibold' : ''}`} title={bStr}>{bStr}</span>
                     </div>
                 </>
             ) : (
