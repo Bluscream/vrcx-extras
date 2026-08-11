@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { closeDb, resolveDbPath } from './server/db.ts';
 import { router } from './server/routes.ts';
 
+import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './server/openapi.ts';
 
@@ -15,6 +16,7 @@ const HOST = process.env.HOST ?? '127.0.0.1';
 
 const app = express();
 app.disable('x-powered-by');
+app.use(cors());
 app.use(express.json());
 
 // Swagger interactive UI docs
