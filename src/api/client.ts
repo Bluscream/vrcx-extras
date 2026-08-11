@@ -128,12 +128,18 @@ export async function fetchVRChatConfig(signal?: AbortSignal): Promise<import('@
     return request<import('@/types').VRChatConfigResponse>('config', {}, signal);
 }
 
-export async function saveVRChatConfig(rawTextOrObj: string | Record<string, any>): Promise<{ success: boolean; message: string }> {
-    const rawText = typeof rawTextOrObj === 'string' ? rawTextOrObj : JSON.stringify(rawTextOrObj, null, 2);
+export async function saveVRChatConfig(configOrRawText: string | Record<string, any>): Promise<{ success: boolean; message: string }> {
+    let configObj: Record<string, any>;
+    if (typeof configOrRawText === 'string') {
+        configObj = JSON.parse(configOrRawText);
+    } else {
+        configObj = configOrRawText;
+    }
+
     const response = await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawText })
+        body: JSON.stringify({ config: configObj })
     });
     if (!response.ok) {
         const payload = await response.json().catch(() => null);

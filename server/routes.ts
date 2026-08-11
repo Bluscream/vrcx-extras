@@ -316,12 +316,20 @@ router.get('/config', (_req, res) => {
 router.post('/config', (req, res) => {
     try {
         console.log('[API] POST /api/config');
-        const { config } = req.body || {};
-        if (!config || typeof config !== 'object') {
-            res.status(400).json({ error: 'Invalid config payload' });
+        let configObj = req.body?.config;
+        if (!configObj && typeof req.body?.rawText === 'string') {
+            try {
+                configObj = JSON.parse(req.body.rawText);
+            } catch (pErr) {
+                res.status(400).json({ error: 'Invalid rawText JSON syntax' });
+                return;
+            }
+        }
+        if (!configObj || typeof configObj !== 'object') {
+            res.status(400).json({ error: 'Invalid config payload — must be JSON object or valid rawText string' });
             return;
         }
-        const result = saveVRChatConfig(config);
+        const result = saveVRChatConfig(configObj);
         res.json(result);
     } catch (err: any) {
         console.error('[API] Error in POST /api/config:', err);
