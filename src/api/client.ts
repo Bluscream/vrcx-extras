@@ -199,48 +199,136 @@ export function toErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
 }
 
-export async function fetchRegistryDefinitions(): Promise<Record<string, import('@/types').RegistryDefinition>> {
+export interface DefinitionUrls {
+    cmdline: string;
+    env: string;
+    registry: string;
+    configSchema: string;
+}
+
+export const DEFAULT_DEFINITION_URLS: DefinitionUrls = {
+    cmdline: 'https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/cmdline.csv',
+    env: 'https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/env.csv',
+    registry: 'https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/registry.csv',
+    configSchema: 'https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/config.schema.json'
+};
+
+const SETTINGS_URLS_KEY = 'vrcx_definition_urls';
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL
+
+export function getDefinitionUrls(): DefinitionUrls {
     try {
-        const response = await fetch('https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/registry.csv');
-        if (!response.ok) return {};
-        const text = await response.text();
-        const lines = text.split('\n');
-        const map: Record<string, import('@/types').RegistryDefinition> = {};
+        const stored = localStorage.getItem(SETTINGS_URLS_KEY);
+        if (stored) return { ...DEFAULT_DEFINITION_URLS, ...JSON.parse(stored) };
+    } catch {}
+    return DEFAULT_DEFINITION_URLS;
+}
 
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
+export function saveDefinitionUrls(urls: DefinitionUrls) {
+    try {
+        localStorage.setItem(SETTINGS_URLS_KEY, JSON.stringify(urls));
+    } catch {}
+}
 
-            const parts = line.match(/(?:^|,)(?:"([^"]*)"|([^,]*))/g)?.map((p) => {
-                let s = p.replace(/^,/, '').trim();
-                if (s.startsWith('"') && s.endsWith('"')) {
-                    s = s.slice(1, -1);
-                }
-                return s;
-            }) || [];
-
-            if (parts.length >= 3) {
-                const keyName = parts[0];
-                map[keyName] = {
-                    keyName,
-                    valueType: parts[1],
-                    description: parts[2],
-                    defaultValue: parts[3] || '',
-                    pattern: parts[4] || ''
-                };
-            }
+export function clearDefinitionCache() {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('vrcx_cache_')) {
+            keysToRemove.push(k);
         }
-        return map;
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+}
+
+export function getCacheStatus(): { count: number; oldestAgeMinutes: number | null } {
+    let count = 0;
+    let oldestTimestamp: number | null = null;
+
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('vrcx_cache_')) {
+            count++;
+            try {
+                const item = JSON.parse(localStorage.getItem(k) || '{}');
+                if (item.timestamp && (oldestTimestamp === null || item.timestamp < oldestTimestamp)) {
+                    oldestTimestamp = item.timestamp;
+                }
+            } catch {}
+        }
+    }
+
+    const oldestAgeMinutes = oldestTimestamp ? Math.floor((Date.now() - oldestTimestamp) / 60000) : null;
+    return { count, oldestAgeMinutes };
+}
+
+async function fetchWithCache<T>(cacheKey: string, url: string, parser: (text: string) => T, forceRefresh = false): Promise<T> {
+    const storageKey = `vrcx_cache_${cacheKey}`;
+    if (!forceRefresh) {
+        try {
+            const cached = localStorage.getItem(storageKey);
+            if (cached) {
+                const { timestamp, data } = JSON.parse(cached);
+                if (Date.now() - timestamp < CACHE_TTL_MS) {
+                    return data as T;
+                }
+            }
+        } catch {}
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    const data = parser(text);
+
+    try {
+        localStorage.setItem(storageKey, JSON.stringify({ timestamp: Date.now(), data }));
+    } catch {}
+
+    return data;
+}
+
+export async function fetchRegistryDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').RegistryDefinition>> {
+    try {
+        const urls = getDefinitionUrls();
+        return await fetchWithCache('registry', urls.registry, (text) => {
+            const lines = text.split('\n');
+            const map: Record<string, import('@/types').RegistryDefinition> = {};
+
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+
+                const parts = line.match(/(?:^|,)(?:"([^"]*)"|([^,]*))/g)?.map((p) => {
+                    let s = p.replace(/^,/, '').trim();
+                    if (s.startsWith('"') && s.endsWith('"')) {
+                        s = s.slice(1, -1);
+                    }
+                    return s;
+                }) || [];
+
+                if (parts.length >= 3) {
+                    const keyName = parts[0];
+                    map[keyName] = {
+                        keyName,
+                        valueType: parts[1],
+                        description: parts[2],
+                        defaultValue: parts[3] || '',
+                        pattern: parts[4] || ''
+                    };
+                }
+            }
+            return map;
+        }, forceRefresh);
     } catch {
         return {};
     }
 }
 
-export async function fetchConfigSchema(): Promise<import('@/types').ConfigSchema> {
+export async function fetchConfigSchema(forceRefresh = false): Promise<import('@/types').ConfigSchema> {
     try {
-        const response = await fetch('https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/config.schema.json');
-        if (!response.ok) return {};
-        return await response.json();
+        const urls = getDefinitionUrls();
+        return await fetchWithCache('config_schema', urls.configSchema, (text) => JSON.parse(text), forceRefresh);
     } catch {
         return {};
     }
@@ -271,57 +359,70 @@ function parseCSVLine(line: string): string[] {
     return result;
 }
 
-export async function fetchCmdLineDefinitions(): Promise<Record<string, import('@/types').CmdLineDefinition>> {
+export async function fetchCmdLineDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').CmdLineDefinition>> {
     try {
-        const response = await fetch('https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/cmdline.csv');
-        if (!response.ok) return {};
-        const text = await response.text();
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const map: Record<string, import('@/types').CmdLineDefinition> = {};
+        const urls = getDefinitionUrls();
+        return await fetchWithCache('cmdline', urls.cmdline, (text) => {
+            const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            const map: Record<string, import('@/types').CmdLineDefinition> = {};
 
-        for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLine(lines[i]);
-            if (parts.length >= 3) {
-                const keyName = parts[0];
-                map[keyName] = {
-                    keyName,
-                    valueType: parts[1],
-                    description: parts[2].replace(/\\n/g, '\n'),
-                    defaultValue: parts[3] || '',
-                    pattern: parts[4] || ''
-                };
+            for (let i = 1; i < lines.length; i++) {
+                const parts = parseCSVLine(lines[i]);
+                if (parts.length >= 3) {
+                    const keyName = parts[0];
+                    map[keyName] = {
+                        keyName,
+                        valueType: parts[1],
+                        description: parts[2].replace(/\\n/g, '\n'),
+                        defaultValue: parts[3] || '',
+                        pattern: parts[4] || ''
+                    };
+                }
             }
-        }
-        return map;
+            return map;
+        }, forceRefresh);
     } catch {
         return {};
     }
 }
 
-export async function fetchEnvDefinitions(): Promise<Record<string, import('@/types').CmdLineDefinition>> {
+export async function fetchEnvDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').CmdLineDefinition>> {
     try {
-        const response = await fetch('https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/env.csv');
-        if (!response.ok) return {};
-        const text = await response.text();
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const map: Record<string, import('@/types').CmdLineDefinition> = {};
+        const urls = getDefinitionUrls();
+        return await fetchWithCache('env', urls.env, (text) => {
+            const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            const map: Record<string, import('@/types').CmdLineDefinition> = {};
 
-        for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLine(lines[i]);
-            if (parts.length >= 3) {
-                const keyName = parts[0];
-                map[keyName] = {
-                    keyName,
-                    valueType: parts[1],
-                    description: parts[2].replace(/\\n/g, '\n'),
-                    defaultValue: parts[3] || '',
-                    pattern: parts[4] || ''
-                };
+            for (let i = 1; i < lines.length; i++) {
+                const parts = parseCSVLine(lines[i]);
+                if (parts.length >= 3) {
+                    const keyName = parts[0];
+                    map[keyName] = {
+                        keyName,
+                        valueType: parts[1],
+                        description: parts[2].replace(/\\n/g, '\n'),
+                        defaultValue: parts[3] || '',
+                        pattern: parts[4] || ''
+                    };
+                }
             }
-        }
-        return map;
+            return map;
+        }, forceRefresh);
     } catch {
         return {};
     }
 }
+
+/** Prefetch all definitions and server configs in parallel on app startup. */
+export async function prefetchAllDefinitionsAndConfig() {
+    await Promise.allSettled([
+        fetchCmdLineDefinitions(),
+        fetchEnvDefinitions(),
+        fetchRegistryDefinitions(),
+        fetchConfigSchema(),
+        fetchLaunchOptions(),
+        fetchVRChatConfig()
+    ]);
+}
+
 

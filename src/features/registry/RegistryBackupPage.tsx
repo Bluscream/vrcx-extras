@@ -1,51 +1,257 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, memo } from 'react';
 import {
     DatabaseIcon,
     RefreshCwIcon,
     RotateCcwIcon,
     SearchIcon,
-    KeyIcon,
     ShieldAlertIcon,
     CheckIcon,
     ActivityIcon,
     ArrowRightIcon,
-    Trash2Icon
+    Trash2Icon,
+    Edit3Icon,
+    CheckCircle2Icon,
+    XCircleIcon
 } from 'lucide-react';
+
+import { diffChars } from 'diff';
+import * as ReactWindowModule from 'react-window';
+
+const List: any = (ReactWindowModule as any).FixedSizeList || (ReactWindowModule as any).default?.FixedSizeList || (ReactWindowModule as any).default || ReactWindowModule;
 
 import {
     fetchRegistryBackups,
     restoreRegistryBackup,
     resetRegistry,
+    fetchRegistryDefinitions,
+    updateRegistryKey,
     toErrorMessage
 } from '@/api/client';
-import type { RegistryBackupSnapshot } from '@/types';
+import type { RegistryBackupSnapshot, RegistryDefinition, RegistryEntry } from '@/types';
+
+interface RowData {
+    keys: string[];
+    currentLiveBackup: RegistryBackupSnapshot | null;
+    selectedBackup: RegistryBackupSnapshot;
+    isComparingWithCurrent: boolean;
+    definitions: Record<string, RegistryDefinition>;
+    inlineCell: { key: string; field: 'name' | 'value' } | null;
+    inlineNameVal: string;
+    inlineDataVal: string;
+    setInlineNameVal: (v: string) => void;
+    setInlineDataVal: (v: string) => void;
+    startInlineEdit: (key: string, field: 'name' | 'value', entry: RegistryEntry) => void;
+    saveInlineEdit: (key: string, type: number) => void;
+    setInlineCell: (v: { key: string; field: 'name' | 'value' } | null) => void;
+    setContextMenu: (v: { x: number; y: number; keyName: string; entry: RegistryEntry } | null) => void;
+}
+
+const RegistryRow = memo(({ index, style, data }: { index: number; style: React.CSSProperties; data: RowData }) => {
+    const key = data.keys[index];
+    const currentVal = data.currentLiveBackup?.entries?.[key];
+    const backupVal = data.selectedBackup.entries?.[key];
+    const activeVal = data.isComparingWithCurrent ? currentVal : (backupVal || currentVal);
+    const def = data.definitions[key];
+
+    const isEditingName = data.inlineCell?.key === key && data.inlineCell.field === 'name';
+    const isEditingVal = data.inlineCell?.key === key && data.inlineCell.field === 'value';
+    const rowTitle = def ? `[VRCOSC] ${def.description}${def.defaultValue ? ` (Default: ${def.defaultValue})` : ''}` : key;
+
+    const isDifferent = data.isComparingWithCurrent && String(currentVal?.data ?? '') !== String(backupVal?.data ?? '');
+
+    const cStr = String(currentVal?.data ?? '-');
+    const bStr = String(backupVal?.data ?? '-');
+
+    const diff = useMemo(() => (isDifferent ? diffChars(cStr, bStr) : []), [isDifferent, cStr, bStr]);
+
+    return (
+        <div
+            style={style}
+            title={rowTitle}
+            onContextMenu={(e) => {
+                e.preventDefault();
+                if (activeVal) data.setContextMenu({ x: e.clientX, y: e.clientY, keyName: key, entry: activeVal });
+            }}
+            className={`flex items-center text-xs font-mono border-b border-border/40 transition-colors ${
+                isDifferent ? 'bg-amber-500/10 hover:bg-amber-500/20' : 'hover:bg-accent/30'
+            }`}
+        >
+            <div
+                onDoubleClick={() => activeVal && data.startInlineEdit(key, 'name', activeVal)}
+                className="w-2/5 px-2.5 py-1.5 font-sans font-medium truncate hover:bg-primary/10 hover:outline hover:outline-primary/30 rounded transition-all shrink-0"
+            >
+                {isEditingName ? (
+                    <div className="flex items-center gap-1">
+                        <input
+                            type="text"
+                            value={data.inlineNameVal}
+                            autoFocus
+                            onChange={(e) => data.setInlineNameVal(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') data.saveInlineEdit(key, activeVal?.type || 1);
+                                if (e.key === 'Escape') data.setInlineCell(null);
+                            }}
+                            className="h-7 w-full rounded border border-primary bg-background px-1.5 text-xs outline-none"
+                        />
+                        <button onClick={() => data.saveInlineEdit(key, activeVal?.type || 1)} className="text-emerald-500 hover:text-emerald-400">
+                            <CheckCircle2Icon className="size-4" />
+                        </button>
+                        <button onClick={() => data.setInlineCell(null)} className="text-muted-foreground hover:text-foreground">
+                            <XCircleIcon className="size-4" />
+                        </button>
+                    </div>
+                ) : (
+                    <span className="truncate block" title={key}>{key}</span>
+                )}
+            </div>
+
+            <div className="w-20 px-2.5 py-1.5 text-muted-foreground font-mono text-[0.7rem] font-bold shrink-0">
+                {(() => {
+                    const t = activeVal?.type ?? backupVal?.type;
+                    switch (t) {
+                        case 1:
+                            return 'STRING';
+                        case 3:
+                            return 'BINARY';
+                        case 4:
+                            return 'DWORD';
+                        case 11:
+                            return 'QWORD';
+                        default:
+                            return `TYPE(${t ?? '?'})`;
+                    }
+                })()}
+            </div>
+
+            {/* Value Column(s) */}
+            {data.isComparingWithCurrent ? (
+                <>
+                    <div
+                        onDoubleClick={() => currentVal && data.startInlineEdit(key, 'value', currentVal)}
+                        className="flex-1 min-w-0 px-2.5 py-1.5 truncate hover:outline hover:outline-emerald-500/30 rounded transition-all text-muted-foreground hover:bg-emerald-500/10"
+                    >
+                        {isEditingVal ? (
+                            <div className="flex items-center gap-1">
+                                <input
+                                    type="text"
+                                    value={data.inlineDataVal}
+                                    autoFocus
+                                    onChange={(e) => data.setInlineDataVal(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') data.saveInlineEdit(key, currentVal?.type || 1);
+                                        if (e.key === 'Escape') data.setInlineCell(null);
+                                    }}
+                                    className="h-7 w-full rounded border border-primary bg-background px-1.5 text-xs outline-none"
+                                />
+                                <button onClick={() => data.saveInlineEdit(key, currentVal?.type || 1)} className="text-emerald-500 hover:text-emerald-400">
+                                    <CheckCircle2Icon className="size-4" />
+                                </button>
+                                <button onClick={() => data.setInlineCell(null)} className="text-muted-foreground hover:text-foreground">
+                                    <XCircleIcon className="size-4" />
+                                </button>
+                            </div>
+                        ) : isDifferent ? (
+                            <span className="truncate block font-mono text-xs" title={cStr}>
+                                {diff.filter((part) => !part.added).map((part, idx) => (
+                                    <span key={idx} className={part.removed ? 'bg-rose-500/30 text-rose-500 font-bold px-0.5 rounded' : ''}>
+                                        {part.value}
+                                    </span>
+                                ))}
+                            </span>
+                        ) : (
+                            <span className="truncate block" title={cStr}>{cStr}</span>
+                        )}
+                    </div>
+                    <div className="flex-1 min-w-0 px-2.5 py-1.5 truncate text-foreground">
+                        {isDifferent ? (
+                            <span className="truncate block font-mono text-xs" title={bStr}>
+                                {diff.filter((part) => !part.removed).map((part, idx) => (
+                                    <span key={idx} className={part.added ? 'bg-emerald-500/30 text-emerald-500 dark:text-emerald-400 font-bold px-0.5 rounded' : ''}>
+                                        {part.value}
+                                    </span>
+                                ))}
+                            </span>
+                        ) : (
+                            <span className="truncate block" title={bStr}>{bStr}</span>
+                        )}
+                    </div>
+                </>
+            ) : (
+                <div
+                    onDoubleClick={() => backupVal && data.startInlineEdit(key, 'value', backupVal)}
+                    className="flex-1 min-w-0 px-2.5 py-1.5 text-muted-foreground truncate hover:bg-primary/10 hover:outline hover:outline-primary/30 rounded transition-all"
+                >
+                    {isEditingVal ? (
+                        <div className="flex items-center gap-1">
+                            <input
+                                type="text"
+                                value={data.inlineDataVal}
+                                autoFocus
+                                onChange={(e) => data.setInlineDataVal(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') data.saveInlineEdit(key, backupVal?.type || 1);
+                                    if (e.key === 'Escape') data.setInlineCell(null);
+                                }}
+                                className="h-7 w-full rounded border border-primary bg-background px-1.5 text-xs outline-none"
+                            />
+                            <button onClick={() => data.saveInlineEdit(key, backupVal?.type || 1)} className="text-emerald-500 hover:text-emerald-400">
+                                <CheckCircle2Icon className="size-4" />
+                            </button>
+                            <button onClick={() => data.setInlineCell(null)} className="text-muted-foreground hover:text-foreground">
+                                <XCircleIcon className="size-4" />
+                            </button>
+                        </div>
+                    ) : (
+                        <span className="truncate block" title={String(backupVal?.data)}>{String(backupVal?.data)}</span>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+});
+
+RegistryRow.displayName = 'RegistryRow';
 
 export function RegistryBackupPage() {
     const [backups, setBackups] = useState<RegistryBackupSnapshot[]>([]);
+    const [definitions, setDefinitions] = useState<Record<string, RegistryDefinition>>({});
     const [loading, setLoading] = useState(true);
     const [wiping, setWiping] = useState(false);
+    const [restoring, setRestoring] = useState(false);
+
     const [error, setError] = useState<string | null>(null);
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-    // Active selection for viewing/comparison
     const [selectedBackup, setSelectedBackup] = useState<RegistryBackupSnapshot | null>(null);
-
-    // Search filter inside registry keys
     const [entrySearch, setEntrySearch] = useState('');
 
-    // Restoring state
-    const [restoringIndex, setRestoringIndex] = useState<number | null>(null);
+    const [inlineCell, setInlineCell] = useState<{ key: string; field: 'name' | 'value' } | null>(null);
+    const [inlineNameVal, setInlineNameVal] = useState<string>('');
+    const [inlineDataVal, setInlineDataVal] = useState<string>('');
+
+    const [contextMenu, setContextMenu] = useState<{ x: number; y: number; keyName: string; entry: RegistryEntry } | null>(null);
+
+    useEffect(() => {
+        loadBackups();
+        loadDefinitions();
+    }, []);
+
+    useEffect(() => {
+        const handleClick = () => setContextMenu(null);
+        window.addEventListener('click', handleClick);
+        return () => window.removeEventListener('click', handleClick);
+    }, []);
 
     const loadBackups = async () => {
-        setLoading(true);
-        setError(null);
         try {
+            setLoading(true);
+            setError(null);
             const data = await fetchRegistryBackups();
             setBackups(data);
-            if (data.length > 0) {
-                // Select Current Registry (index -1) by default if present
-                const currentReg = data.find((b) => b.index === -1) || data[0];
-                setSelectedBackup(currentReg);
+            if (data.length > 0 && !selectedBackup) {
+                const live = data.find((b) => b.index === -1);
+                const vanilla = data.find((b) => b.name === 'Vanilla');
+                setSelectedBackup(vanilla || live || data[0]);
             }
         } catch (err) {
             setError(toErrorMessage(err));
@@ -54,23 +260,52 @@ export function RegistryBackupPage() {
         }
     };
 
-    useEffect(() => {
-        loadBackups();
-    }, []);
+    const loadDefinitions = async () => {
+        try {
+            const defs = await fetchRegistryDefinitions();
+            setDefinitions(defs);
+        } catch (err) {
+            console.error('Failed to load VRCOSC definitions:', err);
+        }
+    };
+
+    const startInlineEdit = (key: string, field: 'name' | 'value', entry: RegistryEntry) => {
+        setInlineCell({ key, field });
+        setInlineNameVal(key);
+        setInlineDataVal(String(entry.data));
+    };
+
+    const saveInlineEdit = async (key: string, type: number) => {
+        if (!inlineCell) return;
+        try {
+            if (inlineCell.field === 'name') {
+                if (inlineNameVal !== key) {
+                    await updateRegistryKey(inlineNameVal, inlineDataVal, type);
+                    setStatusMessage(`Renamed key "${key}" to "${inlineNameVal}".`);
+                }
+            } else {
+                await updateRegistryKey(key, inlineDataVal, type);
+                setStatusMessage(`Updated value for key "${key}".`);
+            }
+            setInlineCell(null);
+            await loadBackups();
+            setTimeout(() => setStatusMessage(null), 3000);
+        } catch (err) {
+            setError(toErrorMessage(err));
+        }
+    };
 
     const handleResetRegistry = async () => {
-        if (!confirm('Are you sure you want to WIPE the live VRChat registry in Proton prefix?\n\nThis will remove all VRChat settings and preferences in Wine.')) {
+        if (!confirm('Are you sure you want to reset your VRChat registry settings to default (Vanilla state)?')) {
             return;
         }
-
-        setWiping(true);
-        setError(null);
-        setStatusMessage(null);
-
         try {
-            const result = await resetRegistry();
-            setStatusMessage(result.message);
+            setWiping(true);
+            setError(null);
+            const res = await resetRegistry();
+            setStatusMessage(res.message);
             await loadBackups();
+            setTimeout(() => setStatusMessage(null), 4000);
         } catch (err) {
             setError(toErrorMessage(err));
         } finally {
@@ -79,49 +314,75 @@ export function RegistryBackupPage() {
     };
 
     const handleRestoreBackup = async (index: number) => {
-        if (
-            !confirm(
-                'IMPORTANT: Please ensure VRChat and Steam are fully CLOSED before restoring!\n\nDo you want to proceed with restoring this backup to your Linux Wine prefix?'
-            )
-        ) {
+        if (!confirm('Are you sure you want to restore this registry snapshot into your live system?')) {
             return;
         }
-
-        setRestoringIndex(index);
-        setStatusMessage(null);
-        setError(null);
         try {
+            setRestoring(true);
+            setError(null);
             const res = await restoreRegistryBackup(index);
             setStatusMessage(res.message);
             await loadBackups();
+            setTimeout(() => setStatusMessage(null), 4000);
         } catch (err) {
             setError(toErrorMessage(err));
         } finally {
-            setRestoringIndex(null);
+            setRestoring(false);
         }
     };
 
     const currentLiveBackup = backups.find((b) => b.index === -1) || null;
-    const isComparingWithCurrent = selectedBackup && selectedBackup.index !== -1;
+    const isComparingWithCurrent = Boolean(selectedBackup && selectedBackup.index !== -1);
 
-    // Collect combined key set when comparing
-    const combinedKeys = Array.from(
-        new Set([
-            ...Object.keys(currentLiveBackup?.entries || {}),
-            ...Object.keys(selectedBackup?.entries || {})
-        ])
-    ).filter((key) => key.toLowerCase().includes(entrySearch.toLowerCase()));
+    const combinedKeys = useMemo(() => {
+        const allKeysSet = new Set<string>();
+        if (selectedBackup?.entries) {
+            Object.keys(selectedBackup.entries).forEach((k) => allKeysSet.add(k));
+        }
+        if (isComparingWithCurrent && currentLiveBackup?.entries) {
+            Object.keys(currentLiveBackup.entries).forEach((k) => allKeysSet.add(k));
+        }
+
+        const q = entrySearch.toLowerCase();
+        return Array.from(allKeysSet).sort().filter((key) => !q || key.toLowerCase().includes(q));
+    }, [selectedBackup, currentLiveBackup, isComparingWithCurrent, entrySearch]);
+
+    const itemData: RowData = useMemo(() => ({
+        keys: combinedKeys,
+        currentLiveBackup,
+        selectedBackup: selectedBackup!,
+        isComparingWithCurrent,
+        definitions,
+        inlineCell,
+        inlineNameVal,
+        inlineDataVal,
+        setInlineNameVal,
+        setInlineDataVal,
+        startInlineEdit,
+        saveInlineEdit,
+        setInlineCell,
+        setContextMenu
+    }), [
+        combinedKeys,
+        currentLiveBackup,
+        selectedBackup,
+        isComparingWithCurrent,
+        definitions,
+        inlineCell,
+        inlineNameVal,
+        inlineDataVal
+    ]);
 
     return (
-        <div className="flex h-full flex-col gap-4 p-6">
+        <div className="flex h-full flex-col gap-4 p-6 relative">
             <header className="flex items-center justify-between">
                 <div>
                     <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
                         <DatabaseIcon className="size-6 text-primary" />
-                        VRChat Linux Registry Browser & Comparison
+                        VRChat Linux Registry Browser & Inline Editor
                     </h1>
                     <p className="text-muted-foreground text-sm">
-                        Compare live Proton prefix registry against saved backups and restore with zero data loss.
+                        Double-click any key name or value to edit inline directly in the table. Hover rows for VRCOSC definitions.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -143,7 +404,6 @@ export function RegistryBackupPage() {
                 </div>
             </header>
 
-            {/* Alert / Status Banners */}
             {error && (
                 <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                     <ShieldAlertIcon className="size-5 shrink-0" />
@@ -158,7 +418,6 @@ export function RegistryBackupPage() {
             )}
 
             <div className="flex min-h-0 flex-1 gap-6">
-                {/* Backups List Sidebar */}
                 <div className="flex w-80 shrink-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs">
                     <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Registry Snapshots
@@ -170,186 +429,104 @@ export function RegistryBackupPage() {
                             <div className="p-4 text-center text-sm text-muted-foreground">No registry snapshots found.</div>
                         ) : (
                             backups.map((b) => {
+                                const isCurrent = b.index === -1;
                                 const isSelected = selectedBackup?.key === b.key;
-                                const isLive = b.index === -1;
-                                const isRestoring = restoringIndex === b.index;
-
                                 return (
-                                    <div
+                                    <button
                                         key={b.key}
                                         onClick={() => setSelectedBackup(b)}
-                                        className={`group relative flex flex-col gap-1 rounded-lg border p-3 cursor-pointer transition-colors ${
-                                            isLive
-                                                ? isSelected
-                                                    ? 'border-emerald-500 bg-emerald-500/10'
-                                                    : 'border-emerald-500/30 hover:bg-emerald-500/5'
-                                                : isSelected
-                                                ? 'border-primary bg-primary/5'
-                                                : 'hover:bg-accent/50 border-transparent'
+                                        className={`flex w-full flex-col gap-1 rounded-lg p-2.5 text-left text-xs transition-all ${
+                                            isSelected ? 'bg-primary text-primary-foreground font-medium shadow-xs' : 'hover:bg-accent/50 text-foreground'
                                         }`}
                                     >
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="font-semibold text-sm truncate flex items-center gap-1.5">
-                                                {isLive && <ActivityIcon className="size-4 text-emerald-500 animate-pulse" />}
-                                                {b.name}
+                                        <div className="flex items-center justify-between">
+                                            <span className="font-semibold truncate max-w-44 flex items-center gap-1.5">
+                                                {isCurrent ? <span className="flex items-center gap-1 text-emerald-500 dark:text-emerald-400 font-bold"><ActivityIcon className="size-3.5" />{b.name}</span> : b.name}
                                             </span>
-                                            {isLive && (
-                                                <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                                                    LIVE
-                                                </span>
-                                            )}
+                                            {isCurrent ? <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[0.65rem] font-bold text-emerald-500 dark:text-emerald-400">LIVE</span> : <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.65rem] text-muted-foreground">{b.keyCount} keys</span>}
                                         </div>
-
-                                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                                            <span>{new Date(b.date).toLocaleDateString()} {new Date(b.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                            <span>{b.keyCount} keys</span>
-                                        </div>
-
-                                        {!isLive && (
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleRestoreBackup(b.index);
-                                                }}
-                                                disabled={isRestoring}
-                                                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-                                            >
-                                                <RotateCcwIcon className={`size-3.5 ${isRestoring ? 'animate-spin' : ''}`} />
-                                                {isRestoring ? 'Restoring...' : 'Restore to Proton'}
-                                            </button>
-                                        )}
-                                    </div>
+                                    </button>
                                 );
                             })
                         )}
                     </div>
                 </div>
 
-                {/* Selected Viewer & Direct Value Comparison */}
-                <div className="flex min-w-0 flex-1 flex-col rounded-xl border bg-card p-4 shadow-xs">
+                <div className="flex flex-1 flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4 shadow-xs">
                     {selectedBackup ? (
                         <>
                             <div className="flex items-center justify-between border-b pb-3">
                                 <div>
-                                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                                        {selectedBackup.name}
-                                        {isComparingWithCurrent && (
-                                            <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground">
-                                                <ArrowRightIcon className="size-3.5" /> Comparing against Live Prefix
-                                            </span>
+                                    <h2 className="flex items-center gap-2 text-base font-semibold">
+                                        {selectedBackup.index === -1 ? (
+                                            <span className="text-emerald-500 dark:text-emerald-400 flex items-center gap-1.5"><ActivityIcon className="size-4" /> Current Registry</span>
+                                        ) : (
+                                            <>Comparing Current Registry <ArrowRightIcon className="size-4 text-muted-foreground" /> {selectedBackup.name}</>
                                         )}
                                     </h2>
-                                    <p className="text-xs text-muted-foreground">
-                                        Created: {new Date(selectedBackup.date).toLocaleString()} • {selectedBackup.keyCount} Registry Keys
-                                    </p>
                                 </div>
+                                {isComparingWithCurrent && (
+                                    <button
+                                        onClick={() => handleRestoreBackup(selectedBackup.index)}
+                                        disabled={restoring}
+                                        className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium shadow-xs transition-colors disabled:opacity-50"
+                                    >
+                                        <RotateCcwIcon className={`size-3.5 ${restoring ? 'animate-spin' : ''}`} />
+                                        Restore Selected Backup
+                                    </button>
+                                )}
                             </div>
-
-                            {/* Search inside keys */}
-                            <div className="my-3 flex items-center gap-2">
+                            <div className="flex items-center gap-2">
                                 <div className="relative flex-1">
                                     <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                                    <input
-                                        type="text"
-                                        placeholder="Search registry keys (e.g. AUDIO, FPS, AVATAR)..."
-                                        value={entrySearch}
-                                        onChange={(e) => setEntrySearch(e.target.value)}
-                                        className="h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-xs outline-none focus:ring-2 focus:ring-primary/50"
-                                    />
+                                    <input type="text" placeholder="Search keys (e.g. Wing, AUDIO)..." value={entrySearch} onChange={(e) => setEntrySearch(e.target.value)} className="h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-xs outline-none focus:ring-2 focus:ring-primary/50" />
                                 </div>
                             </div>
 
-                            {/* Key Comparison Table */}
-                            <div className="flex-1 overflow-y-auto rounded-lg border">
-                                <table className="w-full text-left text-xs">
-                                    <thead className="sticky top-0 bg-muted text-muted-foreground">
-                                        <tr>
-                                            <th className="p-2.5 font-medium">Key Name</th>
-                                            {isComparingWithCurrent ? (
-                                                <>
-                                                    <th className="p-2.5 font-medium text-emerald-600 dark:text-emerald-400">Current (Live Prefix)</th>
-                                                    <th className="p-2.5 font-medium text-primary">Backup ({selectedBackup.name})</th>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <th className="p-2.5 font-medium">Type</th>
-                                                    <th className="p-2.5 font-medium">Value Data</th>
-                                                </>
-                                            )}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y">
-                                        {combinedKeys.length === 0 ? (
-                                            <tr>
-                                                <td colSpan={isComparingWithCurrent ? 3 : 3} className="p-4 text-center text-muted-foreground">
-                                                    No matching registry keys.
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            combinedKeys.map((key) => {
-                                                const currentVal = currentLiveBackup?.entries?.[key];
-                                                const backupVal = selectedBackup.entries?.[key];
+                            <div className="flex-1 overflow-hidden rounded-lg border flex flex-col">
+                                <div className="flex items-center bg-muted text-muted-foreground font-medium text-xs border-b shrink-0">
+                                    <div className="w-2/5 px-2.5 py-2">Key Name</div>
+                                    <div className="w-20 px-2.5 py-2">Type</div>
+                                    {isComparingWithCurrent ? (
+                                        <>
+                                            <div className="flex-1 px-2.5 py-2 text-emerald-600">Current (Live)</div>
+                                            <div className="flex-1 px-2.5 py-2 text-primary">Backup Value</div>
+                                        </>
+                                    ) : (
+                                        <div className="flex-1 px-2.5 py-2">Value</div>
+                                    )}
+                                </div>
 
-                                                if (isComparingWithCurrent) {
-                                                    let currentStr = currentVal !== undefined ? String(currentVal.data) : '<NOT IN LIVE>';
-                                                    const backupStr = backupVal !== undefined ? String(backupVal.data) : '<NOT IN BACKUP>';
-
-                                                    // If live prefix only has unhashed hex (e.g. 15ABE8AE2B5E) but backup has the string (e.g. Favorites)
-                                                    if (currentVal && typeof backupVal?.data === 'string' && typeof currentVal.data === 'string' && /^[0-9A-Fa-f]+$/.test(currentVal.data)) {
-                                                        // They represent the same underlying preference
-                                                        currentStr = backupStr;
-                                                    }
-
-                                                    const isDifferent = currentStr !== backupStr;
-
-                                                    return (
-                                                        <tr key={key} className={`font-mono transition-colors ${isDifferent ? 'bg-amber-500/10' : 'hover:bg-accent/30'}`}>
-                                                            <td className="p-2.5 font-sans font-medium max-w-56 truncate" title={key}>
-                                                                <span className="flex items-center gap-1.5">
-                                                                    <KeyIcon className="size-3.5 shrink-0 text-primary/70" />
-                                                                    {key}
-                                                                </span>
-                                                            </td>
-                                                            <td className={`p-2.5 max-w-xs truncate ${currentVal === undefined ? 'text-destructive font-bold' : 'text-muted-foreground'}`} title={currentStr}>
-                                                                {currentStr}
-                                                            </td>
-                                                            <td className={`p-2.5 max-w-xs truncate ${backupVal === undefined ? 'text-destructive font-bold' : isDifferent ? 'text-amber-600 dark:text-amber-400 font-semibold' : 'text-muted-foreground'}`} title={backupStr}>
-                                                                {backupStr}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                }
-
-                                                // Single view mode (Current Live selected)
-                                                return (
-                                                    <tr key={key} className="hover:bg-accent/30 font-mono">
-                                                        <td className="p-2.5 font-sans font-medium max-w-64 truncate" title={key}>
-                                                            <span className="flex items-center gap-1.5">
-                                                                <KeyIcon className="size-3.5 shrink-0 text-emerald-500" />
-                                                                {key}
-                                                            </span>
-                                                        </td>
-                                                        <td className="p-2.5 text-muted-foreground">
-                                                            {backupVal?.type === 4 ? 'DWORD' : backupVal?.type === 1 ? 'String' : `Hex(${backupVal?.type})`}
-                                                        </td>
-                                                        <td className="p-2.5 max-w-md truncate text-muted-foreground" title={String(backupVal?.data)}>
-                                                            {String(backupVal?.data)}
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })
-                                        )}
-                                    </tbody>
-                                </table>
+                                <div className="flex-1 min-h-0">
+                                    {typeof List === 'function' ? (
+                                        <List
+                                            height={550}
+                                            itemCount={combinedKeys.length}
+                                            itemSize={36}
+                                            width="100%"
+                                            itemData={itemData}
+                                        >
+                                            {RegistryRow}
+                                        </List>
+                                    ) : (
+                                        <div className="p-4 text-center text-xs text-muted-foreground">Rendering list...</div>
+                                    )}
+                                </div>
                             </div>
                         </>
                     ) : (
-                        <div className="flex h-full items-center justify-center text-muted-foreground">
-                            Select a backup from the sidebar to compare or view its contents.
-                        </div>
+                        <div className="flex h-full items-center justify-center text-muted-foreground">Select a backup.</div>
                     )}
                 </div>
             </div>
+
+            {contextMenu && (
+                <div style={{ top: contextMenu.y, left: contextMenu.x }} className="fixed z-50 min-w-44 rounded-lg border bg-popover p-1.5 shadow-xl text-xs">
+                    <div className="px-2 py-1 font-semibold text-[0.65rem] text-muted-foreground border-b mb-1 truncate max-w-48">{contextMenu.keyName}</div>
+                    <button onClick={() => { startInlineEdit(contextMenu.keyName, 'name', contextMenu.entry); setContextMenu(null); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent text-left"><Edit3Icon className="size-3.5 text-primary" /> Edit Key Name Inline</button>
+                    <button onClick={() => { startInlineEdit(contextMenu.keyName, 'value', contextMenu.entry); setContextMenu(null); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent text-left"><Edit3Icon className="size-3.5 text-emerald-500" /> Edit Key Value Inline</button>
+                </div>
+            )}
         </div>
     );
 }

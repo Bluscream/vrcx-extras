@@ -14,11 +14,19 @@ export type {
     Player,
     PlayerDetails,
     RegistryBackupSnapshot,
+    RegistryDefinition,
     RegistryEntry,
     SearchCategory,
     SearchResultItem,
     SessionParticipant,
     UnifiedSearchResults,
-    WorldDetails
+    WorldDetails,
+    VRChatConfigResponse,
+    ConfigSchema,
+    ConfigSchemaProperty,
+    LaunchOptionsResponse,
+    CmdLineDefinition,
+    CompatTool,
+    CompatToolSaveResponse
 } from '../shared/api.ts';
 

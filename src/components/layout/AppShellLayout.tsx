@@ -10,7 +10,8 @@ import { Outlet } from 'react-router';
 import {
     fetchDatabaseStatus,
     isAbortError,
-    toErrorMessage
+    toErrorMessage,
+    prefetchAllDefinitionsAndConfig
 } from '@/api/client';
 import { useTheme } from '@/hooks/useTheme';
 import type { DatabaseStatus } from '@/types';
@@ -48,6 +49,9 @@ export function AppShellLayout() {
     }, []);
 
     useEffect(() => {
+        // Background prefetch definitions & configs on app startup
+        prefetchAllDefinitionsAndConfig().catch(() => {});
+
         const controller = new AbortController();
         fetchDatabaseStatus(controller.signal)
             .then(setDbStatus)
