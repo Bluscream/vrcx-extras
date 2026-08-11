@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { readSettings } from './settings.ts';
 import { findProtonPrefix } from './registry.ts';
 
 export function getVRChatAppDataDir(): string {
