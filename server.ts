@@ -1,8 +1,11 @@
 import express, { type ErrorRequestHandler } from 'express';
 import fs from 'node:fs';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { openAppWindow, type AppWindow } from './server/app-window.ts';
 import { closeDb, resolveDbPath } from './server/db.ts';
 import { EMBEDDED_FRONTEND } from './server/embedded-frontend.generated.ts';
 import { preloadRegistryBackups } from './server/registry.ts';
@@ -95,18 +98,77 @@ if (embeddedPaths.length > 0) {
     console.warn('[!] dist/ not found — run `npm run build` to serve the UI.');
 }
 
-const server = app.listen(PORT, HOST, () => {
-    console.log(`[*] VRCX-Extras companion backend on http://${HOST}:${PORT}`);
-    console.log(`[*] DB path: ${resolveDbPath()}`);
-    // Parse the backup blob now rather than on the first client request.
-    preloadRegistryBackups();
-});
-
-for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-    process.once(signal, () => {
-        server.close(() => {
-            closeDb();
-            process.exit(0);
+/**
+ * Binds the first free port at or after `preferred`.
+ *
+ * The UI and the API share one origin, so the port the server lands on is the
+ * one the window must open — leaving it to chance (port 0) would work, but a
+ * predictable 8990 keeps bookmarks and the Swagger docs link stable. Only when
+ * something already holds it do we walk forward.
+ */
+function listenOnFreePort(preferred: number, attemptsLeft = 20): Promise<Server> {
+    return new Promise((resolve, reject) => {
+        const server = app.listen(preferred, HOST);
+        server.once('listening', () => resolve(server));
+        server.once('error', (err: NodeJS.ErrnoException) => {
+            if (err.code === 'EADDRINUSE' && attemptsLeft > 0) {
+                console.warn(`[!] Port ${preferred} is in use, trying ${preferred + 1}...`);
+                listenOnFreePort(preferred + 1, attemptsLeft - 1).then(resolve, reject);
+                return;
+            }
+            reject(err);
         });
     });
 }
+
+let appWindow: AppWindow | null = null;
+
+function shutdown(server: Server): void {
+    appWindow?.close();
+    server.close(() => {
+        closeDb();
+        process.exit(0);
+    });
+    // Don't hang on a wedged keep-alive connection.
+    setTimeout(() => process.exit(0), 3000).unref();
+}
+
+// Wrapped in a function rather than using top-level await: esbuild cannot emit
+// top-level await in the CJS bundle the packaged binary is built from.
+async function main(): Promise<void> {
+    const server = await listenOnFreePort(PORT);
+    const boundPort = (server.address() as AddressInfo).port;
+    const appUrl = `http://${HOST}:${boundPort}`;
+
+    console.log(`[*] VRCX-Extras companion on ${appUrl}`);
+    console.log(`[*] API at ${appUrl}/api  •  docs at ${appUrl}/docs`);
+    console.log(`[*] DB path: ${resolveDbPath()}`);
+    // Parse the backup blob now rather than on the first client request.
+    preloadRegistryBackups();
+
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+        process.once(signal, () => shutdown(server));
+    }
+
+    // Only the packaged build owns a window: `node server.ts` is the dev
+    // workflow, where the page is already open against the Vite dev server.
+    // --no-window and VRCX_NO_WINDOW opt out for headless or remote use.
+    const wantsWindow =
+        embeddedPaths.length > 0 &&
+        !process.argv.includes('--no-window') &&
+        process.env['VRCX_NO_WINDOW'] !== '1';
+
+    if (wantsWindow) {
+        appWindow = openAppWindow(appUrl);
+        // Closing the window quits the app, the way a desktop app behaves.
+        void appWindow.closed.then(() => {
+            console.log('[*] App window closed — shutting down.');
+            shutdown(server);
+        });
+    }
+}
+
+main().catch((err) => {
+    console.error('[!] Failed to start:', err);
+    process.exit(1);
+});
