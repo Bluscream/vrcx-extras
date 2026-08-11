@@ -22,11 +22,12 @@ import {
     resetRegistry,
     fetchRegistryDefinitions,
     updateRegistryKey,
+    RegistryValidationError,
     toErrorMessage
 } from '@/api/client';
 import { registryValueTypeLabel } from '@/types';
 import { resolveRegistryDefinition, type RegistryDefinitionIndex } from '../../../shared/definitions.ts';
-import type { RegistryBackupSnapshot, RegistryEntry } from '@/types';
+import type { RegistryBackupSnapshot, RegistryEntry, RegistryValueType } from '@/types';
 
 interface RowData {
     keys: string[];
@@ -40,7 +41,7 @@ interface RowData {
     setInlineNameVal: (v: string) => void;
     setInlineDataVal: (v: string) => void;
     startInlineEdit: (key: string, field: 'name' | 'value', entry: RegistryEntry) => void;
-    saveInlineEdit: (key: string, type: number) => void;
+    saveInlineEdit: (key: string, type: RegistryValueType) => void;
     setInlineCell: (v: { key: string; field: 'name' | 'value' } | null) => void;
     setContextMenu: (v: { x: number; y: number; keyName: string; entry: RegistryEntry } | null) => void;
 }
@@ -253,18 +254,40 @@ export function RegistryBackupPage() {
         setInlineDataVal(String(entry.data));
     };
 
-    const saveInlineEdit = async (key: string, type: number) => {
+    const saveInlineEdit = async (key: string, type: RegistryValueType) => {
         if (!inlineCell) return;
+        const targetKey = inlineCell.field === 'name' ? inlineNameVal : key;
+        if (inlineCell.field === 'name' && inlineNameVal === key) {
+            setInlineCell(null);
+            return;
+        }
+
+        // The server compares the write against the key's published definition
+        // and refuses contradictions; offer to override rather than silently
+        // writing or silently failing.
+        const write = async (force: boolean) => updateRegistryKey(targetKey, inlineDataVal, type, force);
+
         try {
-            if (inlineCell.field === 'name') {
-                if (inlineNameVal !== key) {
-                    await updateRegistryKey(inlineNameVal, inlineDataVal, type);
-                    setStatusMessage(`Renamed key "${key}" to "${inlineNameVal}".`);
+            let result;
+            try {
+                result = await write(false);
+            } catch (err) {
+                if (!(err instanceof RegistryValidationError)) {
+                    throw err;
                 }
-            } else {
-                await updateRegistryKey(key, inlineDataVal, type);
-                setStatusMessage(`Updated value for key "${key}".`);
+                const detail = err.errors.length > 0 ? err.errors.join('\n') : err.message;
+                if (!confirm(`This value does not match the definition for "${targetKey}":\n\n${detail}\n\nWrite it anyway?`)) {
+                    return;
+                }
+                result = await write(true);
             }
+
+            const suffix = result.warnings?.length ? ` (${result.warnings.length} warning(s), see server log)` : '';
+            setStatusMessage(
+                inlineCell.field === 'name'
+                    ? `Renamed key "${key}" to "${targetKey}".${suffix}`
+                    : `Updated value for key "${key}".${suffix}`
+            );
             setInlineCell(null);
             await loadBackups();
             setTimeout(() => setStatusMessage(null), 3000);

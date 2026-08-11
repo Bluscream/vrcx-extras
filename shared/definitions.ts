@@ -5,7 +5,7 @@
  * each indexing `parts[n]` without checking length. They are unified here so
  * the column mapping is stated once and every access is bounds-checked.
  */
-import type { CmdLineDefinition, RegistryDefinition } from './api.ts';
+import { REGISTRY_VALUE_TYPE, type CmdLineDefinition, type RegistryDefinition, type RegistryValueType } from './api.ts';
 
 /**
  * Placeholder for a VRChat user id inside a definition's key name.
@@ -221,6 +221,94 @@ export function parseRegistryDefinitions(text: string): RegistryDefinitionIndex 
 export interface ResolvedRegistryDefinition extends RegistryDefinition {
     /** The user id captured from a templated key, when one matched. */
     userId?: string;
+}
+
+/** Maps the CSV's ValueType column onto the numeric type we store. */
+const REG_TYPE_NAMES: Record<string, RegistryValueType> = {
+    REG_SZ: REGISTRY_VALUE_TYPE.string,
+    REG_BINARY: REGISTRY_VALUE_TYPE.binary,
+    REG_DWORD: REGISTRY_VALUE_TYPE.dword,
+    REG_QWORD: REGISTRY_VALUE_TYPE.qword
+};
+
+export function registryTypeFromName(name: string): RegistryValueType | undefined {
+    return REG_TYPE_NAMES[name.trim().toUpperCase()];
+}
+
+export interface RegistryWriteCheck {
+    /** False when the write contradicts the definition and should be refused. */
+    ok: boolean;
+    /** Reasons the write was refused. */
+    errors: string[];
+    /** Observations that do not justify refusing the write. */
+    warnings: string[];
+}
+
+/**
+ * Compares an attempted write against the definition for its key.
+ *
+ * Two different confidence levels, deliberately:
+ *
+ * - **Type** is enforced. Writing a DWORD where the definition says
+ *   REG_BINARY produces a genuinely corrupt entry in the user's prefix.
+ * - **Pattern** is only enforced for string-shaped types. The CSV's patterns
+ *   describe the *logical* value — `^(0|0\.\d+|1|1\.0)$` for an audio level —
+ *   while a REG_QWORD is stored here as the raw integer (1073741824). Testing
+ *   the pattern against that representation would reject every legitimate
+ *   audio edit, so for numeric types the mismatch is reported as a warning
+ *   instead.
+ *
+ * An unknown key yields ok with a warning: absence from the CSV is not
+ * evidence that a write is wrong.
+ */
+export function checkRegistryWrite(
+    definition: ResolvedRegistryDefinition | undefined,
+    value: string | number,
+    type: RegistryValueType
+): RegistryWriteCheck {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!definition) {
+        return { ok: true, errors, warnings: ['No definition for this key; wrote without validation.'] };
+    }
+
+    const expectedType = registryTypeFromName(definition.valueType);
+    if (expectedType === undefined) {
+        warnings.push(`Definition lists an unrecognised type "${definition.valueType}"; type not checked.`);
+    } else if (expectedType !== type) {
+        errors.push(
+            `Type ${type} does not match the definition for this key (${definition.valueType} = ${expectedType}).`
+        );
+    }
+
+    const pattern = definition.pattern.trim();
+    if (pattern) {
+        let matcher: RegExp | undefined;
+        try {
+            matcher = new RegExp(pattern);
+        } catch {
+            warnings.push(`Definition pattern is not a valid regular expression; pattern not checked.`);
+        }
+
+        if (matcher) {
+            const asText = String(value);
+            const comparable =
+                type === REGISTRY_VALUE_TYPE.string || type === REGISTRY_VALUE_TYPE.binary;
+            if (matcher.test(asText)) {
+                // Matches — nothing to report.
+            } else if (comparable) {
+                errors.push(`Value does not match the definition pattern ${pattern}.`);
+            } else {
+                warnings.push(
+                    `Value does not match the definition pattern ${pattern}, ` +
+                        `but the pattern describes the decoded value while this type is stored raw, so it was not enforced.`
+                );
+            }
+        }
+    }
+
+    return { ok: errors.length === 0, errors, warnings };
 }
 
 /**

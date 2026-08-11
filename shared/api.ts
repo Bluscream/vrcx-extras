@@ -197,8 +197,14 @@ export function isRegistryValueType(value: unknown): value is RegistryValueType 
     return typeof value === 'number' && REGISTRY_VALUE_TYPES.includes(value);
 }
 
-/** Human label for a value type, used in the registry table's type column. */
-export function registryValueTypeLabel(type: RegistryValueType | undefined): string {
+/**
+ * Human label for a value type, used in the registry table's type column.
+ *
+ * Accepts `number` rather than only RegistryValueType: the point of the
+ * fallback is to name a code we do not model yet, which by definition is not
+ * in the union.
+ */
+export function registryValueTypeLabel(type: number | undefined): string {
     switch (type) {
         case REGISTRY_VALUE_TYPE.string:
             return 'STRING';
@@ -209,7 +215,9 @@ export function registryValueTypeLabel(type: RegistryValueType | undefined): str
         case REGISTRY_VALUE_TYPE.qword:
             return 'QWORD';
         default:
-            return 'TYPE(?)';
+            // Show the raw code when there is one, so an unmodelled type is
+            // identifiable from a screenshot rather than just "unknown".
+            return type === undefined ? 'UNKNOWN' : `UNKNOWN (${type})`;
     }
 }
 

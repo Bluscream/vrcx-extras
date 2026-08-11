@@ -23,6 +23,7 @@ import {
     invalidateRegistryBackupCache,
     readRegistryBackupsFromDb,
     restoreRegistryBackup,
+    validateRegistryWrite,
     wipeProtonRegistry,
     updateProtonRegistryKey
 } from './registry.ts';
@@ -143,7 +144,7 @@ router.post('/registry/update', async (req, res) => {
         // validated rather than trusted: a wrong value type would be written
         // back as the wrong kind of registry entry.
         const body: unknown = req.body;
-        const { key, value, type } = isJsonObject(body) ? body : {};
+        const { key, value, type, force: body_force } = isJsonObject(body) ? body : {};
 
         if (typeof key !== 'string' || key.length === 0) {
             res.status(400).json({ error: 'Missing key name' });
@@ -161,10 +162,33 @@ router.post('/registry/update', async (req, res) => {
             return;
         }
 
+        // Compare the write against the published definition for this key.
+        // `force` lets a caller override deliberately; nothing is written that
+        // contradicts a definition without the caller having said so.
+        const force = body_force === true;
+        const check = await validateRegistryWrite(key, value, valueType);
+        for (const warning of check.warnings) {
+            console.warn(`[API] registry/update "${key}": ${warning}`);
+        }
+        if (!check.ok && !force) {
+            console.warn(`[API] Refused registry/update "${key}": ${check.errors.join(' ')}`);
+            res.status(422).json({
+                error: check.errors.join(' '),
+                errors: check.errors,
+                warnings: check.warnings,
+                // Tells the client this is overridable rather than malformed.
+                overridable: true
+            });
+            return;
+        }
+        if (!check.ok) {
+            console.warn(`[API] Forced registry/update "${key}" despite: ${check.errors.join(' ')}`);
+        }
+
         console.log(`[API] POST /api/registry/update key="${key}"`);
         const result = await updateProtonRegistryKey(key, value, valueType);
         invalidateLiveRegistryCache();
-        res.json(result);
+        res.json({ ...result, warnings: check.warnings });
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/registry/update:', err);
         res.status(500).json({ error: toErrorMessage(err, 'Failed to update registry key') });

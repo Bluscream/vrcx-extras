@@ -4,7 +4,7 @@ import {
     parseRegistryDefinitions,
     type RegistryDefinitionIndex
 } from '../../shared/definitions.ts';
-import type { CmdLineDefinition, DatabaseStatus, EntityDetailsResponse, JsonObject, OverlappingSession, Player, UnifiedSearchResults } from '@/types';
+import type { CmdLineDefinition, DatabaseStatus, RegistryValueType, EntityDetailsResponse, JsonObject, OverlappingSession, Player, UnifiedSearchResults } from '@/types';
 
 export class ApiError extends Error {
     constructor(
@@ -117,17 +117,49 @@ export async function restoreRegistryBackup(index: number): Promise<{
     return response.json();
 }
 
-export async function updateRegistryKey(key: string, value: string, type?: string | number): Promise<{ success: boolean; message: string }> {
+/** Raised when a write contradicts the key's definition; retryable with force. */
+export class RegistryValidationError extends ApiError {
+    constructor(
+        message: string,
+        readonly errors: string[],
+        readonly warnings: string[]
+    ) {
+        super(message, 422);
+        this.name = 'RegistryValidationError';
+    }
+}
+
+export async function updateRegistryKey(
+    key: string,
+    value: string,
+    type?: RegistryValueType,
+    force = false
+): Promise<{ success: boolean; message: string; warnings?: string[] }> {
     const response = await fetch('/api/registry/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value, type })
+        body: JSON.stringify({ key, value, type, force })
     });
     if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new ApiError(payload?.error || 'Failed to update registry key', response.status);
+        const payload: unknown = await response.json().catch(() => null);
+        const detail = isJsonObject(payload) ? payload : {};
+        const message = typeof detail['error'] === 'string' ? detail['error'] : 'Failed to update registry key';
+        // 422 means the value contradicts the definition rather than being
+        // malformed, so the caller can offer to write it anyway.
+        if (response.status === 422 && detail['overridable'] === true) {
+            throw new RegistryValidationError(
+                message,
+                toStringArray(detail['errors']),
+                toStringArray(detail['warnings'])
+            );
+        }
+        throw new ApiError(message, response.status);
     }
     return response.json();
+}
+
+function toStringArray(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 export async function fetchVRChatConfig(signal?: AbortSignal): Promise<import('@/types').VRChatConfigResponse> {

@@ -13,7 +13,14 @@ import {
     type RegistryValueType
 } from '../shared/api.ts';
 import { isJsonObject, toErrorMessage } from '../shared/json.ts';
-import { readSettings } from './settings.ts';
+import {
+    checkRegistryWrite,
+    parseRegistryDefinitions,
+    resolveRegistryDefinition,
+    type RegistryDefinitionIndex,
+    type RegistryWriteCheck
+} from '../shared/definitions.ts';
+import { fetchDefinitionContent, readSettings } from './settings.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -283,6 +290,47 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
     }
 
     return null;
+}
+
+/**
+ * Definition index used to vet writes, cached alongside its source text.
+ *
+ * fetchDefinitionContent already handles the network and the disk cache; this
+ * only avoids re-parsing 817 rows and recompiling ~86 regexes per write.
+ */
+let cachedDefinitions: { text: string; index: RegistryDefinitionIndex } | null = null;
+
+async function getRegistryDefinitions(): Promise<RegistryDefinitionIndex | null> {
+    try {
+        const text = await fetchDefinitionContent('registry');
+        if (!cachedDefinitions || cachedDefinitions.text !== text) {
+            cachedDefinitions = { text, index: parseRegistryDefinitions(text) };
+        }
+        return cachedDefinitions.index;
+    } catch (err) {
+        // Definitions are advisory; being offline must not block registry edits.
+        console.warn('[RegistryService] Could not load definitions for validation:', toErrorMessage(err));
+        return null;
+    }
+}
+
+/**
+ * Compares a write against the definition for its key before it is applied.
+ *
+ * Runs on the server rather than only in the UI because /api/registry/update
+ * is reachable directly (Swagger, scripts), and this is the last point before
+ * a value is written into the user's real Wine prefix.
+ */
+export async function validateRegistryWrite(
+    key: string,
+    value: RegistryValue,
+    type: RegistryValueType
+): Promise<RegistryWriteCheck> {
+    const index = await getRegistryDefinitions();
+    if (!index) {
+        return { ok: true, errors: [], warnings: ['Definitions unavailable; wrote without validation.'] };
+    }
+    return checkRegistryWrite(resolveRegistryDefinition(index, key), value, type);
 }
 
 /**
