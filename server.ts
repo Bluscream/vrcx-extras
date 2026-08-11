@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { closeDb, resolveDbPath } from './server/db.ts';
 import { router } from './server/routes.ts';
 
+import swaggerUi from 'swagger-ui-express';
+import { openApiSpec } from './server/openapi.ts';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT ?? 8990);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -13,6 +16,11 @@ const HOST = process.env.HOST ?? '127.0.0.1';
 const app = express();
 app.disable('x-powered-by');
 app.use(express.json());
+
+// Swagger interactive UI docs
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
+
 app.use('/api', router);
 
 // Any /api route that fell through is a client error, not an SPA deep link.

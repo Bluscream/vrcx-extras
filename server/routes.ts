@@ -46,7 +46,13 @@ function parseUserIds(raw: unknown): string[] {
     ].slice(0, MAX_TARGET_USERS);
 }
 
+import { openApiSpec } from './openapi.ts';
+
 export const router = Router();
+
+router.get('/openapi.json', (_req, res) => {
+    res.json(openApiSpec);
+});
 
 router.get('/settings', (_req, res) => {
     try {
