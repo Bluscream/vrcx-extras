@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { closeDb, resolveDbPath } from './server/db.ts';
+import { EMBEDDED_FRONTEND } from './server/embedded-frontend.generated.ts';
 import { preloadRegistryBackups } from './server/registry.ts';
 import { router } from './server/routes.ts';
 
@@ -11,7 +12,16 @@ import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { openApiSpec } from './server/openapi.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/**
+ * esbuild bundles this file to CJS for the packaged binary, where `import.meta`
+ * is an empty object — reading `.url` yields undefined and `fileURLToPath`
+ * throws. Fall back to the executable's own directory in that build; under
+ * `node server.ts` the ESM value is present and used as before.
+ */
+const moduleUrl: string | undefined = import.meta.url;
+const __dirname = moduleUrl
+    ? path.dirname(fileURLToPath(moduleUrl))
+    : path.dirname(process.execPath);
 const PORT = Number(process.env.PORT ?? 8990);
 const HOST = process.env.HOST ?? '127.0.0.1';
 
@@ -38,8 +48,44 @@ const apiErrorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 };
 app.use('/api', apiErrorHandler);
 
+const embeddedPaths = Object.keys(EMBEDDED_FRONTEND);
 const distPath = path.join(__dirname, 'dist');
-if (fs.existsSync(distPath)) {
+
+if (embeddedPaths.length > 0) {
+    // Packaged binary: the frontend was inlined at build time, so there is no
+    // dist/ on disk to read. Decode once at startup rather than per request.
+    const assets = new Map(
+        embeddedPaths.map((key) => [
+            key,
+            {
+                contentType: EMBEDDED_FRONTEND[key]!.contentType,
+                buffer: Buffer.from(EMBEDDED_FRONTEND[key]!.body, 'base64')
+            }
+        ])
+    );
+    const indexHtml = assets.get('/index.html');
+
+    app.get('*', (req, res) => {
+        const asset = assets.get(req.path);
+        if (asset) {
+            // Hashed filenames under /assets are immutable; index.html is not.
+            res.setHeader(
+                'Cache-Control',
+                req.path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache'
+            );
+            res.type(asset.contentType).send(asset.buffer);
+            return;
+        }
+        // Client-side routes such as /player-links must fall through to the SPA.
+        if (indexHtml) {
+            res.setHeader('Cache-Control', 'no-cache');
+            res.type(indexHtml.contentType).send(indexHtml.buffer);
+            return;
+        }
+        res.status(404).send('Not found');
+    });
+    console.log(`[*] Serving embedded frontend (${embeddedPaths.length} files).`);
+} else if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     // Client-side routes such as /player-links must fall through to the SPA.
     app.get('*', (_req, res) => {
