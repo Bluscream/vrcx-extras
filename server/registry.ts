@@ -9,7 +9,7 @@ import { readSettings } from './settings.ts';
 
 const execFileAsync = promisify(execFile);
 
-function findProtonPrefix(): string | null {
+export function findProtonPrefix(): string | null {
     console.log('[RegistryService] Searching for VRChat Proton prefix...');
     const settings = readSettings();
     const candidatePaths = [

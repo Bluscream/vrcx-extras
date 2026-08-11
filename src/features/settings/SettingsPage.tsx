@@ -22,7 +22,7 @@ import type { AppSettings, DiskCacheStatus } from '@/types';
 const DEFAULT_PATHS = {
     protonPrefix: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
     wineBin: '',
-    vrchatAppData: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat',
+    vrchatAppData: '',
     localConfigVdf: '',
     steamConfigVdf: '',
     compatToolsDir: '/run/media/system/Data/Games/Steam/compatibilitytools.d'
@@ -404,10 +404,12 @@ export function SettingsPage() {
                         </div>
 
                         <div>
-                            <label className="font-medium text-foreground block mb-1">VRChat AppData Folder (`config.json` parent folder)</label>
+                            <label className="font-medium text-foreground block mb-1">
+                                VRChat AppData Folder <span className="text-muted-foreground font-normal">(Auto-derived from Proton prefix if empty)</span>
+                            </label>
                             <input
                                 type="text"
-                                placeholder="/path/to/.../AppData/LocalLow/VRChat/VRChat"
+                                placeholder="Auto-derived: <ProtonPrefix>/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat"
                                 value={settings.paths?.vrchatAppData || ''}
                                 onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, vrchatAppData: e.target.value } })}
                                 className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"

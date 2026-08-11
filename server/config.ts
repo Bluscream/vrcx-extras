@@ -1,22 +1,28 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readSettings } from './settings.ts';
+import { findProtonPrefix } from './registry.ts';
 
-function getVRChatAppDataDir(): string {
+export function getVRChatAppDataDir(): string {
     const settings = readSettings();
-    const customPath = settings.paths?.vrchatAppData;
+    if (settings.paths?.vrchatAppData) {
+        return settings.paths.vrchatAppData;
+    }
+
+    const protonPrefix = findProtonPrefix();
+    if (protonPrefix) {
+        const derived = path.join(protonPrefix, 'drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat');
+        if (fs.existsSync(derived)) return derived;
+    }
 
     const candidatePaths = [
-        customPath,
         process.env.VRC_APPDATA_DIR,
         '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat',
         path.join(process.env.HOME || '', '.local/share/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat')
     ].filter((p): p is string => Boolean(p));
 
     const found = candidatePaths.find((p) => fs.existsSync(p));
-    if (found) return found;
-
-    return customPath || candidatePaths[candidatePaths.length - 1];
+    return found || candidatePaths[candidatePaths.length - 1];
 }
 
 function getConfigFilePath(): string {

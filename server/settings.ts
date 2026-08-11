@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     paths: {
         protonPrefix: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
         wineBin: '',
-        vrchatAppData: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat',
+        vrchatAppData: '',
         localConfigVdf: '',
         steamConfigVdf: '',
         compatToolsDir: '/run/media/system/Data/Games/Steam/compatibilitytools.d'
