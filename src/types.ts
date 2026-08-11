@@ -27,6 +27,8 @@ export type {
     LaunchOptionsResponse,
     CmdLineDefinition,
     CompatTool,
-    CompatToolSaveResponse
+    AppSettings,
+    DefinitionUrls,
+    DiskCacheStatus
 } from '../shared/api.ts';
 

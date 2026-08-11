@@ -183,6 +183,93 @@ export interface RegistryBackupSnapshot {
     entries: Record<string, RegistryEntry>;
 }
 
+export interface RegistryDefinition {
+    keyName: string;
+    valueType: string;
+    description: string;
+    defaultValue: string;
+    pattern: string;
+    min?: string;
+    max?: string;
+    possibleValues?: string[];
+    options?: string[];
+}
+
+export interface VRChatConfigResponse {
+    filePath: string;
+    exists: boolean;
+    config: Record<string, any>;
+    rawText: string;
+}
+
+export interface ConfigSchemaProperty {
+    type?: string;
+    description?: string;
+    default?: any;
+    minimum?: number;
+    maximum?: number;
+    examples?: any[];
+    items?: {
+        type?: string;
+        enum?: string[];
+    };
+}
+
+export interface ConfigSchema {
+    title?: string;
+    description?: string;
+    properties?: Record<string, ConfigSchemaProperty>;
+}
+
+export interface CompatTool {
+    /** Internal name used by Steam config (e.g. "GE-Proton10-34") */
+    name: string;
+    /** Human-readable label from compatibilitytool.vdf */
+    displayName: string;
+    /** Path to the tool directory */
+    path: string;
+    /** Whether it's a user-installed tool vs Steam built-in */
+    custom: boolean;
+}
+
+export interface LaunchOptionsResponse {
+    filePath: string;
+    exists: boolean;
+    rawLaunchOptions: string;
+    steamRunning: boolean;
+    /** Name of the currently selected compatibility tool for VRChat (from Steam config.vdf) */
+    compatTool: string;
+    /** All tools available on this machine */
+    availableCompatTools: CompatTool[];
+}
+
+export interface CmdLineDefinition {
+    keyName: string;
+    valueType: string;
+    description: string;
+    defaultValue: string;
+    pattern: string;
+}
+
+export interface DefinitionUrls {
+    cmdline: string;
+    env: string;
+    registry: string;
+    configSchema: string;
+}
+
+export interface AppSettings {
+    urls: DefinitionUrls;
+    cacheTtlMinutes: number; // 0 = disabled
+}
+
+export interface DiskCacheStatus {
+    count: number;
+    totalSizeBytes: number;
+    files: Array<{ name: string; ageMinutes: number; sizeBytes: number }>;
+}
+
+
 
 
 

@@ -214,7 +214,6 @@ export const DEFAULT_DEFINITION_URLS: DefinitionUrls = {
 };
 
 const SETTINGS_URLS_KEY = 'vrcx_definition_urls';
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL
 
 export function getDefinitionUrls(): DefinitionUrls {
     try {
@@ -262,64 +261,63 @@ export function getCacheStatus(): { count: number; oldestAgeMinutes: number | nu
     return { count, oldestAgeMinutes };
 }
 
-async function fetchWithCache<T>(cacheKey: string, url: string, parser: (text: string) => T, forceRefresh = false): Promise<T> {
-    const storageKey = `vrcx_cache_${cacheKey}`;
-    if (!forceRefresh) {
-        try {
-            const cached = localStorage.getItem(storageKey);
-            if (cached) {
-                const { timestamp, data } = JSON.parse(cached);
-                if (Date.now() - timestamp < CACHE_TTL_MS) {
-                    return data as T;
-                }
-            }
-        } catch {}
-    }
 
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const text = await response.text();
-    const data = parser(text);
 
-    try {
-        localStorage.setItem(storageKey, JSON.stringify({ timestamp: Date.now(), data }));
-    } catch {}
+export async function fetchServerSettings(): Promise<{ settings: import('@/types').AppSettings; diskCache: import('@/types').DiskCacheStatus }> {
+    const response = await fetch('/api/settings');
+    if (!response.ok) throw new ApiError('Failed to fetch settings', response.status);
+    return response.json();
+}
 
-    return data;
+export async function saveServerSettings(settings: import('@/types').AppSettings): Promise<{ success: boolean; settings: import('@/types').AppSettings }> {
+    const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    });
+    if (!response.ok) throw new ApiError('Failed to save settings', response.status);
+    return response.json();
+}
+
+export async function clearServerDiskCache(): Promise<{ success: boolean }> {
+    const response = await fetch('/api/cache/clear', { method: 'POST' });
+    if (!response.ok) throw new ApiError('Failed to clear disk cache', response.status);
+    return response.json();
 }
 
 export async function fetchRegistryDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').RegistryDefinition>> {
     try {
-        const urls = getDefinitionUrls();
-        return await fetchWithCache('registry', urls.registry, (text) => {
-            const lines = text.split('\n');
-            const map: Record<string, import('@/types').RegistryDefinition> = {};
+        const url = `/api/definitions/registry${forceRefresh ? '?refresh=true' : ''}`;
+        const response = await fetch(url);
+        if (!response.ok) return {};
+        const text = await response.text();
+        const lines = text.split('\n');
+        const map: Record<string, import('@/types').RegistryDefinition> = {};
 
-            for (let i = 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (!line) continue;
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
 
-                const parts = line.match(/(?:^|,)(?:"([^"]*)"|([^,]*))/g)?.map((p) => {
-                    let s = p.replace(/^,/, '').trim();
-                    if (s.startsWith('"') && s.endsWith('"')) {
-                        s = s.slice(1, -1);
-                    }
-                    return s;
-                }) || [];
-
-                if (parts.length >= 3) {
-                    const keyName = parts[0];
-                    map[keyName] = {
-                        keyName,
-                        valueType: parts[1],
-                        description: parts[2],
-                        defaultValue: parts[3] || '',
-                        pattern: parts[4] || ''
-                    };
+            const parts = line.match(/(?:^|,)(?:"([^"]*)"|([^,]*))/g)?.map((p) => {
+                let s = p.replace(/^,/, '').trim();
+                if (s.startsWith('"') && s.endsWith('"')) {
+                    s = s.slice(1, -1);
                 }
+                return s;
+            }) || [];
+
+            if (parts.length >= 3) {
+                const keyName = parts[0];
+                map[keyName] = {
+                    keyName,
+                    valueType: parts[1],
+                    description: parts[2],
+                    defaultValue: parts[3] || '',
+                    pattern: parts[4] || ''
+                };
             }
-            return map;
-        }, forceRefresh);
+        }
+        return map;
     } catch {
         return {};
     }
@@ -327,8 +325,10 @@ export async function fetchRegistryDefinitions(forceRefresh = false): Promise<Re
 
 export async function fetchConfigSchema(forceRefresh = false): Promise<import('@/types').ConfigSchema> {
     try {
-        const urls = getDefinitionUrls();
-        return await fetchWithCache('config_schema', urls.configSchema, (text) => JSON.parse(text), forceRefresh);
+        const url = `/api/definitions/configSchema${forceRefresh ? '?refresh=true' : ''}`;
+        const response = await fetch(url);
+        if (!response.ok) return {};
+        return await response.json();
     } catch {
         return {};
     }
@@ -361,26 +361,27 @@ function parseCSVLine(line: string): string[] {
 
 export async function fetchCmdLineDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').CmdLineDefinition>> {
     try {
-        const urls = getDefinitionUrls();
-        return await fetchWithCache('cmdline', urls.cmdline, (text) => {
-            const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-            const map: Record<string, import('@/types').CmdLineDefinition> = {};
+        const url = `/api/definitions/cmdline${forceRefresh ? '?refresh=true' : ''}`;
+        const response = await fetch(url);
+        if (!response.ok) return {};
+        const text = await response.text();
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const map: Record<string, import('@/types').CmdLineDefinition> = {};
 
-            for (let i = 1; i < lines.length; i++) {
-                const parts = parseCSVLine(lines[i]);
-                if (parts.length >= 3) {
-                    const keyName = parts[0];
-                    map[keyName] = {
-                        keyName,
-                        valueType: parts[1],
-                        description: parts[2].replace(/\\n/g, '\n'),
-                        defaultValue: parts[3] || '',
-                        pattern: parts[4] || ''
-                    };
-                }
+        for (let i = 1; i < lines.length; i++) {
+            const parts = parseCSVLine(lines[i]);
+            if (parts.length >= 3) {
+                const keyName = parts[0];
+                map[keyName] = {
+                    keyName,
+                    valueType: parts[1],
+                    description: parts[2].replace(/\\n/g, '\n'),
+                    defaultValue: parts[3] || '',
+                    pattern: parts[4] || ''
+                };
             }
-            return map;
-        }, forceRefresh);
+        }
+        return map;
     } catch {
         return {};
     }
@@ -388,26 +389,27 @@ export async function fetchCmdLineDefinitions(forceRefresh = false): Promise<Rec
 
 export async function fetchEnvDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').CmdLineDefinition>> {
     try {
-        const urls = getDefinitionUrls();
-        return await fetchWithCache('env', urls.env, (text) => {
-            const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-            const map: Record<string, import('@/types').CmdLineDefinition> = {};
+        const url = `/api/definitions/env${forceRefresh ? '?refresh=true' : ''}`;
+        const response = await fetch(url);
+        if (!response.ok) return {};
+        const text = await response.text();
+        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+        const map: Record<string, import('@/types').CmdLineDefinition> = {};
 
-            for (let i = 1; i < lines.length; i++) {
-                const parts = parseCSVLine(lines[i]);
-                if (parts.length >= 3) {
-                    const keyName = parts[0];
-                    map[keyName] = {
-                        keyName,
-                        valueType: parts[1],
-                        description: parts[2].replace(/\\n/g, '\n'),
-                        defaultValue: parts[3] || '',
-                        pattern: parts[4] || ''
-                    };
-                }
+        for (let i = 1; i < lines.length; i++) {
+            const parts = parseCSVLine(lines[i]);
+            if (parts.length >= 3) {
+                const keyName = parts[0];
+                map[keyName] = {
+                    keyName,
+                    valueType: parts[1],
+                    description: parts[2].replace(/\\n/g, '\n'),
+                    defaultValue: parts[3] || '',
+                    pattern: parts[4] || ''
+                };
             }
-            return map;
-        }, forceRefresh);
+        }
+        return map;
     } catch {
         return {};
     }
@@ -424,5 +426,6 @@ export async function prefetchAllDefinitionsAndConfig() {
         fetchVRChatConfig()
     ]);
 }
+
 
 

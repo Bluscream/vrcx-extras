@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -228,7 +229,7 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
             return {
                 key: 'current_live',
                 index: -1,
-                name: 'Current Registry (Live Prefix)',
+                name: 'Current Registry',
                 date: dateStr,
                 keyCount: Object.keys(entries).length,
                 entries
@@ -563,4 +564,76 @@ export async function wipeProtonRegistry(): Promise<{ success: boolean; message:
         success: true,
         message: 'Successfully wiped all VRChat registry keys from Proton prefix!'
     };
+}
+
+export async function updateProtonRegistryKey(key: string, value: any, type: number): Promise<{ success: boolean; message: string }> {
+    console.log(`[RegistryService] Updating live key "${key}" = ${JSON.stringify(value)} (type ${type})...`);
+    const prefix = findProtonPrefix();
+    if (!prefix) {
+        throw new Error('Could not locate VRChat Proton Wine prefix on this Linux system.');
+    }
+
+    const hashedKey = computeUnityKeyHash(key);
+    const wineBin = findWineBinary();
+
+    if (wineBin) {
+        try {
+            let regTypeStr = 'REG_SZ';
+            let regValStr = String(value);
+
+            if (type === 4) {
+                regTypeStr = 'REG_DWORD';
+                regValStr = `0x${((typeof value === 'number' ? value : parseInt(String(value), 10) || 0) >>> 0).toString(16)}`;
+            } else if (type === 3) {
+                regTypeStr = 'REG_BINARY';
+                if (typeof value === 'string') {
+                    const buf = Buffer.from(value + '\0', 'utf-8');
+                    regValStr = Array.from(buf).map((b) => b.toString(16).padStart(2, '0')).join('');
+                }
+            }
+
+            console.log(`[RegistryService] Executing wine reg add for ${key} and ${hashedKey}...`);
+            await execFileAsync(wineBin, ['reg', 'add', 'HKCU\\Software\\VRChat\\VRChat', '/v', key, '/t', regTypeStr, '/d', regValStr, '/f'], {
+                env: { ...process.env, WINEPREFIX: prefix }
+            });
+            await execFileAsync(wineBin, ['reg', 'add', 'HKCU\\Software\\VRChat\\VRChat', '/v', hashedKey, '/t', regTypeStr, '/d', regValStr, '/f'], {
+                env: { ...process.env, WINEPREFIX: prefix }
+            });
+            console.log('[RegistryService] Wine reg add succeeded.');
+            return {
+                success: true,
+                message: `Successfully updated "${key}" in live Proton prefix.`
+            };
+        } catch (err: any) {
+            console.warn('[RegistryService] Wine reg add failed, falling back to regedit file import:', err?.message);
+        }
+    }
+
+    // Regedit fallback import
+    const entries: Record<string, RegistryEntry> = {
+        [key]: { type, data: value }
+    };
+    const regContent = buildWineRegContent(entries);
+    const tempRegPath = path.join(os.tmpdir(), `vrchat_key_${Date.now()}.reg`);
+    fs.writeFileSync(tempRegPath, regContent, 'utf-8');
+
+    try {
+        if (wineBin) {
+            await execFileAsync(wineBin, ['regedit', tempRegPath], {
+                env: { ...process.env, WINEPREFIX: prefix }
+            });
+        } else {
+            // Append directly to user.reg fallback
+            const userRegPath = path.join(prefix, 'user.reg');
+            fs.appendFileSync(userRegPath, `\n${regContent}`);
+        }
+        return {
+            success: true,
+            message: `Successfully updated "${key}" in live Proton prefix.`
+        };
+    } finally {
+        if (fs.existsSync(tempRegPath)) {
+            fs.unlinkSync(tempRegPath);
+        }
+    }
 }
