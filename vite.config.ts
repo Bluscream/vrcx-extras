@@ -11,6 +11,9 @@ export default defineConfig({
     resolve: {
         alias: { '@': path.resolve(import.meta.dirname, 'src') }
     },
+    optimizeDeps: {
+        include: ['react-window']
+    },
     server: {
         port: 5173,
         proxy: {
