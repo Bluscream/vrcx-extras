@@ -260,12 +260,7 @@ export interface DefinitionUrls {
 
 export interface AppPaths {
     steamDir: string;
-    protonPrefix?: string;
     wineBin?: string;
-    vrchatAppData?: string;
-    localConfigVdf?: string;
-    steamConfigVdf?: string;
-    compatToolsDir?: string;
 }
 
 export interface AppSettings {

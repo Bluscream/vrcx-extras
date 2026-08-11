@@ -4,11 +4,6 @@ import { readSettings } from './settings.ts';
 import { findProtonPrefix } from './registry.ts';
 
 export function getVRChatAppDataDir(): string {
-    const settings = readSettings();
-    if (settings.paths?.vrchatAppData) {
-        return settings.paths.vrchatAppData;
-    }
-
     const protonPrefix = findProtonPrefix();
     if (protonPrefix) {
         const derived = path.join(protonPrefix, 'drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat');

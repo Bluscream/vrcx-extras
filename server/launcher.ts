@@ -14,7 +14,6 @@ function getLocalConfigVdfPath(): string {
     const derivedUserdata = steamDir ? path.join(steamDir, 'userdata') : undefined;
 
     const candidatePaths = [
-        settings.paths?.localConfigVdf,
         process.env.VRC_LOCALCONFIG_PATH,
         path.join(process.env.HOME || '', '.local/share/Steam/userdata/62180933/config/localconfig.vdf'),
         path.join(process.env.HOME || '', '.steam/steam/userdata/62180933/config/localconfig.vdf')
@@ -38,7 +37,7 @@ function getLocalConfigVdfPath(): string {
         }
     }
 
-    return settings.paths?.localConfigVdf || candidatePaths[candidatePaths.length - 1];
+    return candidatePaths[candidatePaths.length - 1];
 }
 
 function getSteamConfigVdfPath(): string {
@@ -47,7 +46,6 @@ function getSteamConfigVdfPath(): string {
     const derivedConfigVdf = steamDir ? path.join(steamDir, 'config/config.vdf') : undefined;
 
     const candidates = [
-        settings.paths?.steamConfigVdf,
         derivedConfigVdf,
         path.join(process.env.HOME || '', '.local/share/Steam/config/config.vdf'),
         path.join(process.env.HOME || '', '.steam/steam/config/config.vdf'),
@@ -63,7 +61,6 @@ export function listCompatTools(): CompatTool[] {
     const home = process.env.HOME || '';
 
     const searchDirs = [
-        settings.paths?.compatToolsDir,
         derivedCompatDir,
         path.join(home, '.local/share/Steam/compatibilitytools.d'),
         path.join(home, '.steam/root/compatibilitytools.d'),

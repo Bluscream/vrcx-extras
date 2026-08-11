@@ -16,7 +16,6 @@ export function findProtonPrefix(): string | null {
     const derivedPrefix = steamDir ? path.join(steamDir, 'steamapps/compatdata/438100/pfx') : undefined;
 
     const candidatePaths = [
-        settings.paths?.protonPrefix,
         derivedPrefix,
         process.env.VRC_PROTON_PREFIX,
         '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
