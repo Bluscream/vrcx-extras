@@ -131,18 +131,18 @@ export function ConfigPage() {
     }, [knownKeys, config]);
 
     return (
-        <div className="flex h-full flex-col gap-4 p-6 relative">
-            <header className="flex items-center justify-between">
-                <div>
-                    <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-                        <FileJsonIcon className="size-6 text-primary" />
+        <div className="flex h-full flex-col gap-4 p-4 sm:p-6 relative">
+            <header className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                    <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-bold tracking-tight">
+                        <FileJsonIcon className="size-6 shrink-0 text-primary" />
                         VRChat Config Manager (`config.json`)
                     </h1>
                     <p className="text-muted-foreground text-sm font-mono truncate max-w-2xl" title={filePath}>
                         {filePath || 'AppData/LocalLow/VRChat/VRChat/config.json'}
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center rounded-lg border bg-muted p-1 text-xs">
                         <button
                             onClick={() => setViewMode('form')}
@@ -207,9 +207,9 @@ export function ConfigPage() {
                     />
                 </div>
             ) : (
-                <div className="flex flex-1 gap-6 min-h-0">
+                <div className="flex flex-1 flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
                     {/* Add Custom Setting Card */}
-                    <div className="w-80 shrink-0 flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs">
+                    <div className="w-full lg:w-80 shrink-0 flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs">
                         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                             <PlusIcon className="size-4 text-primary" /> Add Setting
                         </h2>
@@ -257,9 +257,11 @@ export function ConfigPage() {
                     </div>
 
                     {/* Settings Form List */}
-                    <div className="flex-1 overflow-y-auto rounded-xl border bg-card p-4 shadow-xs space-y-4">
+                    {/* One column on phones, more as the viewport widens. `content-start`
+                        keeps rows from stretching when the grid is taller than its rows. */}
+                    <div className="flex-1 overflow-y-auto rounded-xl border bg-card p-4 shadow-xs grid content-start gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                         {activeKeys.length === 0 ? (
-                            <div className="p-8 text-center text-muted-foreground text-sm">No settings configured.</div>
+                            <div className="col-span-full p-8 text-center text-muted-foreground text-sm">No settings configured.</div>
                         ) : (
                             activeKeys.map((key) => {
                                 const propDef: ConfigSchemaProperty | undefined = schema.properties?.[key];
@@ -269,14 +271,14 @@ export function ConfigPage() {
                                 return (
                                     <div
                                         key={key}
-                                        className={`p-3.5 rounded-lg border transition-all ${
+                                        className={`flex flex-col p-3.5 rounded-lg border transition-all ${
                                             isConfigured ? 'bg-background border-border/70 shadow-2xs' : 'bg-muted/20 border-dashed border-border/50'
                                         }`}
                                     >
                                         <div className="flex items-start justify-between gap-3 mb-1.5">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-mono text-sm font-semibold text-foreground">{key}</span>
+                                            <div className="min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="font-mono text-sm font-semibold text-foreground break-all">{key}</span>
                                                     {propDef?.type && (
                                                         <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[0.65rem] font-bold text-primary">
                                                             {propDef.type.toUpperCase()}
@@ -289,8 +291,8 @@ export function ConfigPage() {
                                                     )}
                                                 </div>
                                                 {propDef?.description && (
-                                                    <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                                                        <InfoIcon className="size-3 text-muted-foreground shrink-0" />
+                                                    <p className="text-xs text-muted-foreground mt-0.5 flex items-start gap-1">
+                                                        <InfoIcon className="size-3 mt-0.5 text-muted-foreground shrink-0" />
                                                         {propDef.description}
                                                     </p>
                                                 )}
@@ -299,7 +301,7 @@ export function ConfigPage() {
                                             {isConfigured && (
                                                 <button
                                                     onClick={() => handleFieldDelete(key)}
-                                                    className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                                                    className="shrink-0 text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
                                                     title="Remove property from config"
                                                 >
                                                     <Trash2Icon className="size-4" />
@@ -307,8 +309,9 @@ export function ConfigPage() {
                                             )}
                                         </div>
 
-                                        {/* Dynamic Control Input */}
-                                        <div className="mt-2.5">
+                                        {/* Dynamic Control Input — pinned to the card's bottom so
+                                            controls line up across a row of uneven descriptions. */}
+                                        <div className="mt-auto pt-2.5">
                                             {typeof val === 'boolean' || propDef?.type === 'boolean' ? (
                                                 <div className="flex items-center gap-3">
                                                     <label className="flex items-center gap-2 cursor-pointer text-xs font-medium">
