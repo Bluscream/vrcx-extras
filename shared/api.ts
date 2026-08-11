@@ -258,8 +258,18 @@ export interface DefinitionUrls {
     configSchema: string;
 }
 
+export interface AppPaths {
+    protonPrefix: string;
+    wineBin: string;
+    vrchatAppData: string;
+    localConfigVdf: string;
+    steamConfigVdf: string;
+    compatToolsDir: string;
+}
+
 export interface AppSettings {
     urls: DefinitionUrls;
+    paths: AppPaths;
     cacheTtlMinutes: number; // 0 = disabled
 }
 

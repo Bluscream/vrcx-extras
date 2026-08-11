@@ -4,11 +4,14 @@ import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import VDF from '@node-steam/vdf';
 import type { CompatTool, LaunchOptionsResponse } from '../shared/api.ts';
+import { readSettings } from './settings.ts';
 
 const execFileAsync = promisify(execFile);
 
 function getLocalConfigVdfPath(): string {
+    const settings = readSettings();
     const candidatePaths = [
+        settings.paths?.localConfigVdf,
         process.env.VRC_LOCALCONFIG_PATH,
         path.join(process.env.HOME || '', '.local/share/Steam/userdata/62180933/config/localconfig.vdf'),
         path.join(process.env.HOME || '', '.steam/steam/userdata/62180933/config/localconfig.vdf')
@@ -30,25 +33,29 @@ function getLocalConfigVdfPath(): string {
         } catch {}
     }
 
-    return path.join(process.env.HOME || '', '.local/share/Steam/userdata/62180933/config/localconfig.vdf');
+    return settings.paths?.localConfigVdf || candidatePaths[candidatePaths.length - 1];
 }
 
 function getSteamConfigVdfPath(): string {
+    const settings = readSettings();
     const candidates = [
+        settings.paths?.steamConfigVdf,
         path.join(process.env.HOME || '', '.local/share/Steam/config/config.vdf'),
         path.join(process.env.HOME || '', '.steam/steam/config/config.vdf'),
-    ];
+    ].filter((p): p is string => Boolean(p));
     return candidates.find((p) => fs.existsSync(p)) ?? candidates[0];
 }
 
 /** Scan all compatibilitytools.d directories for user-installed compat tools */
 export function listCompatTools(): CompatTool[] {
+    const settings = readSettings();
     const home = process.env.HOME || '';
     const searchDirs = [
+        settings.paths?.compatToolsDir,
         path.join(home, '.local/share/Steam/compatibilitytools.d'),
         path.join(home, '.steam/root/compatibilitytools.d'),
         '/run/media/system/Data/Games/Steam/compatibilitytools.d',
-    ];
+    ].filter((p): p is string => Boolean(p));
 
     const tools: CompatTool[] = [];
     const seen = new Set<string>();

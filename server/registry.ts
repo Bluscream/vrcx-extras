@@ -5,12 +5,15 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { getDb } from './db.ts';
 import type { RegistryBackupSnapshot, RegistryEntry } from '../shared/api.ts';
+import { readSettings } from './settings.ts';
 
 const execFileAsync = promisify(execFile);
 
 function findProtonPrefix(): string | null {
     console.log('[RegistryService] Searching for VRChat Proton prefix...');
+    const settings = readSettings();
     const candidatePaths = [
+        settings.paths?.protonPrefix,
         process.env.VRC_PROTON_PREFIX,
         '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
         path.join(process.env.HOME || '', '.local/share/Steam/steamapps/compatdata/438100/pfx'),
@@ -24,7 +27,9 @@ function findProtonPrefix(): string | null {
 
 function findWineBinary(): string | null {
     console.log('[RegistryService] Searching for Wine binary in compatibility tools...');
+    const settings = readSettings();
     const candidatePaths = [
+        settings.paths?.wineBin,
         process.env.VRC_WINE_BIN,
         path.join(process.env.HOME || '', '.local/share/Steam/compatibilitytools.d/GE-Proton9-25/files/bin/wine'),
         path.join(process.env.HOME || '', '.steam/steam/compatibilitytools.d/GE-Proton9-25/files/bin/wine'),

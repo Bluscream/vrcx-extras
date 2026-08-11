@@ -1,8 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { readSettings } from './settings.ts';
 
 function getVRChatAppDataDir(): string {
+    const settings = readSettings();
+    const customPath = settings.paths?.vrchatAppData;
+
     const candidatePaths = [
+        customPath,
         process.env.VRC_APPDATA_DIR,
         '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat',
         path.join(process.env.HOME || '', '.local/share/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat')
@@ -11,8 +16,7 @@ function getVRChatAppDataDir(): string {
     const found = candidatePaths.find((p) => fs.existsSync(p));
     if (found) return found;
 
-    // Fallback directory path if not found yet
-    return '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat';
+    return customPath || candidatePaths[candidatePaths.length - 1];
 }
 
 function getConfigFilePath(): string {

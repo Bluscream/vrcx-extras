@@ -10,6 +10,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
         registry: 'https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/registry.csv',
         configSchema: 'https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/config.schema.json'
     },
+    paths: {
+        protonPrefix: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
+        wineBin: '',
+        vrchatAppData: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat',
+        localConfigVdf: '',
+        steamConfigVdf: '',
+        compatToolsDir: '/run/media/system/Data/Games/Steam/compatibilitytools.d'
+    },
     cacheTtlMinutes: 60
 };
 
@@ -50,6 +58,14 @@ cmdline = "${settings.urls.cmdline}"
 env = "${settings.urls.env}"
 registry = "${settings.urls.registry}"
 config_schema = "${settings.urls.configSchema}"
+
+[paths]
+proton_prefix = "${settings.paths?.protonPrefix || ''}"
+wine_bin = "${settings.paths?.wineBin || ''}"
+vrchat_appdata = "${settings.paths?.vrchatAppData || ''}"
+localconfig_vdf = "${settings.paths?.localConfigVdf || ''}"
+steamconfig_vdf = "${settings.paths?.steamConfigVdf || ''}"
+compat_tools_dir = "${settings.paths?.compatToolsDir || ''}"
 `;
 }
 
@@ -84,6 +100,14 @@ function parseTomlSettings(tomlStr: string): AppSettings {
             if (key === 'env') settings.urls.env = valStr;
             if (key === 'registry') settings.urls.registry = valStr;
             if (key === 'config_schema') settings.urls.configSchema = valStr;
+        } else if (currentSection === 'paths') {
+            if (!settings.paths) settings.paths = { ...DEFAULT_SETTINGS.paths };
+            if (key === 'proton_prefix') settings.paths.protonPrefix = valStr;
+            if (key === 'wine_bin') settings.paths.wineBin = valStr;
+            if (key === 'vrchat_appdata') settings.paths.vrchatAppData = valStr;
+            if (key === 'localconfig_vdf') settings.paths.localConfigVdf = valStr;
+            if (key === 'steamconfig_vdf') settings.paths.steamConfigVdf = valStr;
+            if (key === 'compat_tools_dir') settings.paths.compatToolsDir = valStr;
         }
     }
 

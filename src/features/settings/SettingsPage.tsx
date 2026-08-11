@@ -7,7 +7,8 @@ import {
     ClockIcon,
     ExternalLinkIcon,
     HardDriveIcon,
-    SlidersHorizontalIcon
+    SlidersHorizontalIcon,
+    FolderIcon
 } from 'lucide-react';
 import {
     fetchServerSettings,
@@ -17,6 +18,15 @@ import {
     DEFAULT_DEFINITION_URLS
 } from '@/api/client';
 import type { AppSettings, DiskCacheStatus } from '@/types';
+
+const DEFAULT_PATHS = {
+    protonPrefix: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
+    wineBin: '',
+    vrchatAppData: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx/drive_c/users/steamuser/AppData/LocalLow/VRChat/VRChat',
+    localConfigVdf: '',
+    steamConfigVdf: '',
+    compatToolsDir: '/run/media/system/Data/Games/Steam/compatibilitytools.d'
+};
 
 const TTL_OPTIONS = [
     { label: '0m (Off - Direct)', minutes: 0 },
@@ -32,11 +42,12 @@ const TTL_OPTIONS = [
 export function SettingsPage() {
     const [settings, setSettings] = useState<AppSettings>({
         urls: DEFAULT_DEFINITION_URLS,
+        paths: DEFAULT_PATHS,
         cacheTtlMinutes: 60
     });
     const [diskCache, setDiskCache] = useState<DiskCacheStatus>({ count: 0, totalSizeBytes: 0, files: [] });
 
-    const [activeSection, setActiveSection] = useState<'cache' | 'urls'>('cache');
+    const [activeSection, setActiveSection] = useState<'cache' | 'urls' | 'paths'>('cache');
     const [savedMsg, setSavedMsg] = useState(false);
     const [clearedMsg, setClearedMsg] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -46,7 +57,10 @@ export function SettingsPage() {
         try {
             setLoading(true);
             const data = await fetchServerSettings();
-            setSettings(data.settings);
+            setSettings({
+                ...data.settings,
+                paths: { ...DEFAULT_PATHS, ...(data.settings.paths || {}) }
+            });
             setDiskCache(data.diskCache);
         } catch (err) {
             console.error('Failed to load settings from server', err);
@@ -63,7 +77,10 @@ export function SettingsPage() {
         if (e) e.preventDefault();
         try {
             const res = await saveServerSettings(settings);
-            setSettings(res.settings);
+            setSettings({
+                ...res.settings,
+                paths: { ...DEFAULT_PATHS, ...(res.settings.paths || {}) }
+            });
             setSavedMsg(true);
             setTimeout(() => setSavedMsg(false), 3000);
         } catch (err) {
@@ -73,6 +90,14 @@ export function SettingsPage() {
 
     const handleResetUrls = async () => {
         const updated = { ...settings, urls: DEFAULT_DEFINITION_URLS };
+        setSettings(updated);
+        await saveServerSettings(updated);
+        setSavedMsg(true);
+        setTimeout(() => setSavedMsg(false), 3000);
+    };
+
+    const handleResetPaths = async () => {
+        const updated = { ...settings, paths: DEFAULT_PATHS };
         setSettings(updated);
         await saveServerSettings(updated);
         setSavedMsg(true);
@@ -128,6 +153,16 @@ export function SettingsPage() {
                     }`}
                 >
                     <GlobeIcon className="size-4" /> Definition URLs
+                </button>
+                <button
+                    onClick={() => setActiveSection('paths')}
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        activeSection === 'paths'
+                            ? 'bg-primary text-primary-foreground shadow-xs'
+                            : 'hover:bg-accent text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                    <FolderIcon className="size-4" /> System Paths
                 </button>
             </div>
 
@@ -312,6 +347,103 @@ export function SettingsPage() {
                             className="flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
                         >
                             <RotateCcwIcon className="size-3.5" /> Restore Default URLs
+                        </button>
+
+                        <div className="flex items-center gap-3">
+                            {savedMsg && (
+                                <span className="flex items-center gap-1 text-xs text-emerald-500 font-medium">
+                                    <CheckIcon className="size-4" /> Saved to config.toml!
+                                </span>
+                            )}
+                            <button
+                                type="submit"
+                                className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+                            >
+                                Save Settings
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            )}
+
+            {/* SECTION 3: System Paths */}
+            {activeSection === 'paths' && (
+                <form onSubmit={handleSave} className="rounded-xl border bg-card p-5 shadow-xs space-y-4 animate-fade-in">
+                    <div className="flex items-center justify-between border-b pb-3">
+                        <div className="flex items-center gap-2 font-semibold text-foreground">
+                            <FolderIcon className="size-5 text-primary" />
+                            <h2>System File & Directory Paths</h2>
+                        </div>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                        Override default file system paths used by backend services for Proton, VRChat config, and Steam VDF files. Leave empty to use auto-detection.
+                    </p>
+
+                    <div className="space-y-3.5 text-xs">
+                        <div>
+                            <label className="font-medium text-foreground block mb-1">VRChat Proton Prefix Path (`system.reg` directory)</label>
+                            <input
+                                type="text"
+                                placeholder="/path/to/compatdata/438100/pfx"
+                                value={settings.paths?.protonPrefix || ''}
+                                onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, protonPrefix: e.target.value } })}
+                                className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="font-medium text-foreground block mb-1">Wine Executable Binary (`wine` CLI)</label>
+                            <input
+                                type="text"
+                                placeholder="/usr/bin/wine or path to GE-Proton wine binary"
+                                value={settings.paths?.wineBin || ''}
+                                onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, wineBin: e.target.value } })}
+                                className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="font-medium text-foreground block mb-1">VRChat AppData Folder (`config.json` parent folder)</label>
+                            <input
+                                type="text"
+                                placeholder="/path/to/.../AppData/LocalLow/VRChat/VRChat"
+                                value={settings.paths?.vrchatAppData || ''}
+                                onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, vrchatAppData: e.target.value } })}
+                                className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="font-medium text-foreground block mb-1">Steam `localconfig.vdf` Path (Launch options string)</label>
+                            <input
+                                type="text"
+                                placeholder="/path/to/userdata/<id>/config/localconfig.vdf"
+                                value={settings.paths?.localConfigVdf || ''}
+                                onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, localConfigVdf: e.target.value } })}
+                                className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="font-medium text-foreground block mb-1">Steam Compatibility Tools Directory (`compatibilitytools.d`)</label>
+                            <input
+                                type="text"
+                                placeholder="/path/to/compatibilitytools.d"
+                                value={settings.paths?.compatToolsDir || ''}
+                                onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, compatToolsDir: e.target.value } })}
+                                className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t pt-3">
+                        <button
+                            type="button"
+                            onClick={handleResetPaths}
+                            className="flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
+                        >
+                            <RotateCcwIcon className="size-3.5" /> Restore Default Paths
                         </button>
 
                         <div className="flex items-center gap-3">
