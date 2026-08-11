@@ -20,12 +20,13 @@ import {
 import type { AppSettings, DiskCacheStatus } from '@/types';
 
 const DEFAULT_PATHS = {
-    protonPrefix: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
+    steamDir: '/run/media/system/Data/Games/Steam',
+    protonPrefix: '',
     wineBin: '',
     vrchatAppData: '',
     localConfigVdf: '',
     steamConfigVdf: '',
-    compatToolsDir: '/run/media/system/Data/Games/Steam/compatibilitytools.d'
+    compatToolsDir: ''
 };
 
 const TTL_OPTIONS = [
@@ -377,15 +378,30 @@ export function SettingsPage() {
                     </div>
 
                     <p className="text-sm text-muted-foreground">
-                        Override default file system paths used by backend services for Proton, VRChat config, and Steam VDF files. Leave empty to use auto-detection.
+                        Configure your primary Steam directory. All Steam sub-paths (Proton prefix, compatibility tools, VDF configs, AppData) automatically derive from this root folder.
                     </p>
 
                     <div className="space-y-3.5 text-xs">
                         <div>
-                            <label className="font-medium text-foreground block mb-1">VRChat Proton Prefix Path (`system.reg` directory)</label>
+                            <label className="font-medium text-foreground block mb-1">
+                                Primary Steam Installation Directory <span className="text-primary font-semibold">(Primary Root Anchor)</span>
+                            </label>
                             <input
                                 type="text"
-                                placeholder="/path/to/compatdata/438100/pfx"
+                                placeholder="/run/media/system/Data/Games/Steam or ~/.local/share/Steam"
+                                value={settings.paths?.steamDir || ''}
+                                onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, steamDir: e.target.value } })}
+                                className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="font-medium text-foreground block mb-1">
+                                VRChat Proton Prefix Path <span className="text-muted-foreground font-normal">(Auto-derived: `&lt;SteamDir&gt;/steamapps/compatdata/438100/pfx`)</span>
+                            </label>
+                            <input
+                                type="text"
+                                placeholder="Auto-derived: <SteamDir>/steamapps/compatdata/438100/pfx"
                                 value={settings.paths?.protonPrefix || ''}
                                 onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, protonPrefix: e.target.value } })}
                                 className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
@@ -417,10 +433,12 @@ export function SettingsPage() {
                         </div>
 
                         <div>
-                            <label className="font-medium text-foreground block mb-1">Steam `localconfig.vdf` Path (Launch options string)</label>
+                            <label className="font-medium text-foreground block mb-1">
+                                Steam `localconfig.vdf` Path <span className="text-muted-foreground font-normal">(Auto-derived: `&lt;SteamDir&gt;/userdata/...`)</span>
+                            </label>
                             <input
                                 type="text"
-                                placeholder="/path/to/userdata/<id>/config/localconfig.vdf"
+                                placeholder="Auto-derived: <SteamDir>/userdata/<id>/config/localconfig.vdf"
                                 value={settings.paths?.localConfigVdf || ''}
                                 onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, localConfigVdf: e.target.value } })}
                                 className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"
@@ -428,10 +446,12 @@ export function SettingsPage() {
                         </div>
 
                         <div>
-                            <label className="font-medium text-foreground block mb-1">Steam Compatibility Tools Directory (`compatibilitytools.d`)</label>
+                            <label className="font-medium text-foreground block mb-1">
+                                Steam Compatibility Tools Directory <span className="text-muted-foreground font-normal">(Auto-derived: `&lt;SteamDir&gt;/compatibilitytools.d`)</span>
+                            </label>
                             <input
                                 type="text"
-                                placeholder="/path/to/compatibilitytools.d"
+                                placeholder="Auto-derived: <SteamDir>/compatibilitytools.d"
                                 value={settings.paths?.compatToolsDir || ''}
                                 onChange={(e) => setSettings({ ...settings, paths: { ...settings.paths, compatToolsDir: e.target.value } })}
                                 className="w-full rounded-lg border bg-background px-3 py-2 text-xs font-mono outline-none focus:ring-2 focus:ring-primary/50"

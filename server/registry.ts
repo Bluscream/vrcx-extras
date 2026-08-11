@@ -12,8 +12,12 @@ const execFileAsync = promisify(execFile);
 export function findProtonPrefix(): string | null {
     console.log('[RegistryService] Searching for VRChat Proton prefix...');
     const settings = readSettings();
+    const steamDir = settings.paths?.steamDir;
+    const derivedPrefix = steamDir ? path.join(steamDir, 'steamapps/compatdata/438100/pfx') : undefined;
+
     const candidatePaths = [
         settings.paths?.protonPrefix,
+        derivedPrefix,
         process.env.VRC_PROTON_PREFIX,
         '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
         path.join(process.env.HOME || '', '.local/share/Steam/steamapps/compatdata/438100/pfx'),

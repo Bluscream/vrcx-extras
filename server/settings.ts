@@ -11,12 +11,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
         configSchema: 'https://raw.githubusercontent.com/Bluscream/vrchat-definitions/main/config.schema.json'
     },
     paths: {
-        protonPrefix: '/run/media/system/Data/Games/Steam/steamapps/compatdata/438100/pfx',
+        steamDir: '/run/media/system/Data/Games/Steam',
+        protonPrefix: '',
         wineBin: '',
         vrchatAppData: '',
         localConfigVdf: '',
         steamConfigVdf: '',
-        compatToolsDir: '/run/media/system/Data/Games/Steam/compatibilitytools.d'
+        compatToolsDir: ''
     },
     cacheTtlMinutes: 60
 };
@@ -59,6 +60,7 @@ function serializeSettingsToToml(settings: AppSettings): string {
             config_schema: settings.urls.configSchema
         },
         paths: {
+            steam_dir: settings.paths?.steamDir || '',
             proton_prefix: settings.paths?.protonPrefix || '',
             wine_bin: settings.paths?.wineBin || '',
             vrchat_appdata: settings.paths?.vrchatAppData || '',
@@ -85,6 +87,7 @@ function parseTomlSettings(tomlStr: string): AppSettings {
     }
     if (parsed.paths) {
         if (!settings.paths) settings.paths = { ...DEFAULT_SETTINGS.paths };
+        if (typeof parsed.paths.steam_dir === 'string') settings.paths.steamDir = parsed.paths.steam_dir;
         if (typeof parsed.paths.proton_prefix === 'string') settings.paths.protonPrefix = parsed.paths.proton_prefix;
         if (typeof parsed.paths.wine_bin === 'string') settings.paths.wineBin = parsed.paths.wine_bin;
         if (typeof parsed.paths.vrchat_appdata === 'string') settings.paths.vrchatAppData = parsed.paths.vrchat_appdata;

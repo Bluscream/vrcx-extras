@@ -259,12 +259,13 @@ export interface DefinitionUrls {
 }
 
 export interface AppPaths {
-    protonPrefix: string;
-    wineBin: string;
-    vrchatAppData: string;
-    localConfigVdf: string;
-    steamConfigVdf: string;
-    compatToolsDir: string;
+    steamDir: string;
+    protonPrefix?: string;
+    wineBin?: string;
+    vrchatAppData?: string;
+    localConfigVdf?: string;
+    steamConfigVdf?: string;
+    compatToolsDir?: string;
 }
 
 export interface AppSettings {
