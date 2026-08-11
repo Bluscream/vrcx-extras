@@ -205,8 +205,11 @@ export function SettingsPage() {
                                 value={TTL_OPTIONS.findIndex((o) => o.minutes === settings.cacheTtlMinutes) < 0 ? 3 : TTL_OPTIONS.findIndex((o) => o.minutes === settings.cacheTtlMinutes)}
                                 onChange={(e) => {
                                     const idx = parseInt(e.target.value, 10);
-                                    const minutes = TTL_OPTIONS[idx].minutes;
-                                    setSettings({ ...settings, cacheTtlMinutes: minutes });
+                                    const option = TTL_OPTIONS[idx];
+                                    if (!option) {
+                                        return;
+                                    }
+                                    setSettings({ ...settings, cacheTtlMinutes: option.minutes });
                                 }}
                                 className="w-full h-2 rounded-lg bg-muted accent-primary cursor-pointer"
                             />

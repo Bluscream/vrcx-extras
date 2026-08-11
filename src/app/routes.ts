@@ -17,7 +17,9 @@ export const navRoutes: NavRoute[] = [
 
 
 
-export const defaultRoute = navRoutes[0].path;
+// navRoutes is a non-empty literal; the ?? keeps the type honest without
+// pretending an empty nav is renderable.
+export const defaultRoute = navRoutes[0]?.path ?? '/';
 
 /** Query parameter carrying pre-selected user ids on the links route. */
 export const USERS_PARAM = 'users';

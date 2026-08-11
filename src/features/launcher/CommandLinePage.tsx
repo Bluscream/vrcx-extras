@@ -208,7 +208,8 @@ export function CommandLinePage() {
 
     const toggleFlag = (flag: string) => {
         const next = parseLaunchOptions(rawLaunchOptions);
-        const flagBase = flag.split('=')[0]; // e.g. --fps from --fps=90
+        // e.g. --fps from --fps=90. split always yields at least one element.
+        const flagBase = flag.split('=')[0] ?? flag;
         if (next.flags.has(flag) || next.kvArgs[flagBase] !== undefined) {
             next.flags.delete(flag);
             delete next.kvArgs[flagBase];
@@ -220,7 +221,7 @@ export function CommandLinePage() {
 
     const isEnvActive = (varName: string) => parsed.envVars[varName] !== undefined;
     const isFlagActive = (flag: string) => {
-        const base = flag.split('=')[0];
+        const base = flag.split('=')[0] ?? flag;
         return parsed.flags.has(flag) || parsed.kvArgs[base] !== undefined;
     };
 

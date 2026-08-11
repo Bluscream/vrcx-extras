@@ -1,9 +1,12 @@
 import { Router } from 'express';
 
-import type {
-    DatabaseStatus,
-    OverlappingSession,
-    Player
+import {
+    REGISTRY_VALUE_TYPE,
+    isDefinitionName,
+    isRegistryValueType,
+    type DatabaseStatus,
+    type OverlappingSession,
+    type Player
 } from '../shared/api.ts';
 import { resolveDbPath, isDbReadOnly, setDbReadOnly } from './db.ts';
 import { getDirectory, getDisplayNames, searchDirectory } from './directory.ts';
@@ -11,6 +14,7 @@ import { parseLocation } from './location.ts';
 import { findSimultaneousWindows, summarizeParticipants } from './overlap.ts';
 import { readPresence } from './presence.ts';
 import { readRosters } from './roster.ts';
+import { isJsonObject, toErrorMessage } from '../shared/json.ts';
 import { getOwnerPrefix } from './schema.ts';
 import { performUnifiedSearch } from './search.ts';
 import {
@@ -33,6 +37,9 @@ import {
     clearDiskCache,
     fetchDefinitionContent
 } from './settings.ts';
+
+/** Rendered into the 400 body so a bad client sees the accepted values. */
+const DEFINITION_TYPE_HINT = Object.values(REGISTRY_VALUE_TYPE).join(', ');
 
 const MAX_PLAYER_RESULTS = 50;
 const MAX_TARGET_USERS = 10;
@@ -61,8 +68,8 @@ router.get('/settings', (_req, res) => {
         const settings = readSettings();
         const diskCache = getDiskCacheStatus();
         res.json({ settings, diskCache });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to read settings' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to read settings') });
     }
 });
 
@@ -75,8 +82,8 @@ router.post('/settings', (req, res) => {
         }
         const success = writeSettings(newSettings);
         res.json({ success, settings: readSettings() });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to write settings' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to write settings') });
     }
 });
 
@@ -84,8 +91,8 @@ router.delete('/settings', (_req, res) => {
     try {
         const settings = resetSettings();
         res.json({ success: true, message: 'Settings reset to defaults', settings });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to reset settings' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to reset settings') });
     }
 });
 
@@ -93,16 +100,16 @@ router.post('/cache/clear', (_req, res) => {
     try {
         const success = clearDiskCache();
         res.json({ success });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to clear disk cache' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to clear disk cache') });
     }
 });
 
 router.get('/definitions/:name', async (req, res) => {
     try {
-        const name = req.params.name as any;
+        const name = req.params.name;
         const forceRefresh = req.query.refresh === 'true';
-        if (!['cmdline', 'env', 'registry', 'configSchema'].includes(name)) {
+        if (!isDefinitionName(name)) {
             res.status(400).json({ error: 'Invalid definition name' });
             return;
         }
@@ -112,9 +119,9 @@ router.get('/definitions/:name', async (req, res) => {
         } else {
             res.type('text/csv').send(content);
         }
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error(`[API] Error fetching definition "${req.params.name}":`, err);
-        res.status(500).json({ error: err?.message || 'Failed to fetch definition' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to fetch definition') });
     }
 });
 
@@ -124,34 +131,51 @@ router.post('/registry/reset', async (_req, res) => {
         const result = await wipeProtonRegistry();
         invalidateLiveRegistryCache();
         res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in POST /api/registry/reset:', err);
-        res.status(500).json({ error: err?.message || 'Failed to wipe registry' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to wipe registry') });
     }
 });
 
 router.post('/registry/update', async (req, res) => {
     try {
-        const { key, value, type } = req.body || {};
-        if (!key) {
+        // This writes into the user's real Wine prefix, so the body is
+        // validated rather than trusted: a wrong value type would be written
+        // back as the wrong kind of registry entry.
+        const body: unknown = req.body;
+        const { key, value, type } = isJsonObject(body) ? body : {};
+
+        if (typeof key !== 'string' || key.length === 0) {
             res.status(400).json({ error: 'Missing key name' });
             return;
         }
+        if (typeof value !== 'string' && typeof value !== 'number') {
+            res.status(400).json({ error: 'Registry value must be a string or a number' });
+            return;
+        }
+        const valueType = type === undefined ? REGISTRY_VALUE_TYPE.string : type;
+        if (!isRegistryValueType(valueType)) {
+            res.status(400).json({
+                error: `Unsupported registry value type: ${String(type)} (expected one of ${DEFINITION_TYPE_HINT})`
+            });
+            return;
+        }
+
         console.log(`[API] POST /api/registry/update key="${key}"`);
-        const result = await updateProtonRegistryKey(key, value, type ?? 1);
+        const result = await updateProtonRegistryKey(key, value, valueType);
         invalidateLiveRegistryCache();
         res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in POST /api/registry/update:', err);
-        res.status(500).json({ error: err?.message || 'Failed to update registry key' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to update registry key') });
     }
 });
 
 router.get('/db/mode', (_req, res) => {
     try {
         res.json({ readOnly: isDbReadOnly() });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to check DB mode' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to check DB mode') });
     }
 });
 
@@ -162,8 +186,8 @@ router.post('/db/mode', (req, res) => {
         // The remount opens a fresh connection; drop snapshots read off the old one.
         invalidateRegistryBackupCache();
         res.json({ readOnly: newMode });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to change DB mode' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to change DB mode') });
     }
 });
 
@@ -174,9 +198,9 @@ router.get('/registry/backups', async (_req, res) => {
         const currentLive = await getCurrentProtonRegistry();
         const result = currentLive ? [currentLive, ...backups] : backups;
         res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in GET /api/registry/backups:', err);
-        res.status(500).json({ error: err?.message || 'Failed to read backups' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to read backups') });
     }
 });
 
@@ -187,9 +211,9 @@ router.post('/registry/backups/:index/restore', async (req, res) => {
         const result = await restoreRegistryBackup(index);
         invalidateLiveRegistryCache();
         res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error(`[API] Error in POST /api/registry/backups/${req.params.index}/restore:`, err);
-        res.status(500).json({ error: err?.message || 'Failed to restore backup' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to restore backup') });
     }
 });
 
@@ -314,9 +338,9 @@ router.get('/config', (_req, res) => {
         console.log('[API] GET /api/config');
         const data = readVRChatConfig();
         res.json(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in GET /api/config:', err);
-        res.status(500).json({ error: err?.message || 'Failed to read VRChat config' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to read VRChat config') });
     }
 });
 
@@ -338,9 +362,9 @@ router.post('/config', (req, res) => {
         }
         const result = saveVRChatConfig(configObj);
         res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in POST /api/config:', err);
-        res.status(500).json({ error: err?.message || 'Failed to save VRChat config' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to save VRChat config') });
     }
 });
 
@@ -350,9 +374,9 @@ router.get('/launcher', async (_req, res) => {
         const data = readLaunchOptions();
         const steamRunning = await isSteamRunning();
         res.json({ ...data, steamRunning });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in GET /api/launcher:', err);
-        res.status(500).json({ error: err?.message || 'Failed to read launch options' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to read launch options') });
     }
 });
 
@@ -377,9 +401,9 @@ router.post('/launcher', async (req, res) => {
         }
 
         res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in POST /api/launcher:', err);
-        res.status(500).json({ error: err?.message || 'Failed to save launch options' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to save launch options') });
     }
 });
 
@@ -387,8 +411,8 @@ router.post('/launcher/steam/stop', async (_req, res) => {
     try {
         await stopSteam();
         res.json({ success: true, message: 'Steam process stopped.' });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to stop Steam' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to stop Steam') });
     }
 });
 
@@ -396,8 +420,8 @@ router.post('/launcher/steam/start', async (_req, res) => {
     try {
         await startSteam();
         res.json({ success: true, message: 'Steam launched.' });
-    } catch (err: any) {
-        res.status(500).json({ error: err?.message || 'Failed to start Steam' });
+    } catch (err: unknown) {
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to start Steam') });
     }
 });
 
@@ -424,8 +448,8 @@ router.post('/launcher/compat-tool', async (req, res) => {
         }
 
         res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[API] Error in POST /api/launcher/compat-tool:', err);
-        res.status(500).json({ error: err?.message || 'Failed to save compat tool' });
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to save compat tool') });
     }
 });

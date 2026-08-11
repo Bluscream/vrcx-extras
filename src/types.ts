@@ -16,6 +16,8 @@ export type {
     RegistryBackupSnapshot,
     RegistryDefinition,
     RegistryEntry,
+    RegistryValue,
+    RegistryValueType,
     SearchCategory,
     SearchResultItem,
     SessionParticipant,
@@ -35,3 +37,7 @@ export type {
     SettingsResetResponse
 } from '../shared/api.ts';
 
+// Value exports (not just types): shared runtime helpers for the registry table.
+export { REGISTRY_VALUE_TYPE, isRegistryValueType, registryValueTypeLabel } from '../shared/api.ts';
+export type { JsonObject, JsonValue } from '../shared/json.ts';
+export { isJsonObject, isJsonValue, toErrorMessage as toThrownMessage } from '../shared/json.ts';

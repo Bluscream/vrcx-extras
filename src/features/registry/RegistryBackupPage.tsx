@@ -24,14 +24,16 @@ import {
     updateRegistryKey,
     toErrorMessage
 } from '@/api/client';
-import type { RegistryBackupSnapshot, RegistryDefinition, RegistryEntry } from '@/types';
+import { registryValueTypeLabel } from '@/types';
+import { resolveRegistryDefinition, type RegistryDefinitionIndex } from '../../../shared/definitions.ts';
+import type { RegistryBackupSnapshot, RegistryEntry } from '@/types';
 
 interface RowData {
     keys: string[];
     currentLiveBackup: RegistryBackupSnapshot | null;
     selectedBackup: RegistryBackupSnapshot;
     isComparingWithCurrent: boolean;
-    definitions: Record<string, RegistryDefinition>;
+    definitions: RegistryDefinitionIndex;
     inlineCell: { key: string; field: 'name' | 'value' } | null;
     inlineNameVal: string;
     inlineDataVal: string;
@@ -44,14 +46,23 @@ interface RowData {
 }
 
 const RegistryRowBase = memo(({ index, style, data }: RowComponentProps<{ data: RowData }>) => {
+    // react-window can ask for a row past the end during a resize; bail rather
+    // than indexing past the array and rendering an undefined key.
     const key = data.keys[index];
+    if (key === undefined) {
+        return <div style={style} />;
+    }
+
     const currentVal = data.currentLiveBackup?.entries?.[key];
     const backupVal = data.selectedBackup.entries?.[key];
     const activeVal = data.isComparingWithCurrent ? currentVal : (backupVal || currentVal);
-    const def = data.definitions[key];
+    // Matches templated definitions such as COLOR_PALETTES_CURRENT_{userId}
+    // as well as exactly-named keys.
+    const def = resolveRegistryDefinition(data.definitions, key);
 
-    const isEditingName = data.inlineCell?.key === key && data.inlineCell.field === 'name';
-    const isEditingVal = data.inlineCell?.key === key && data.inlineCell.field === 'value';
+    const inlineCell = data.inlineCell;
+    const isEditingName = inlineCell?.key === key && inlineCell.field === 'name';
+    const isEditingVal = inlineCell?.key === key && inlineCell.field === 'value';
     const rowTitle = def ? `[VRCOSC] ${def.description}${def.defaultValue ? ` (Default: ${def.defaultValue})` : ''}` : key;
 
     const isDifferent = data.isComparingWithCurrent && String(currentVal?.data ?? '') !== String(backupVal?.data ?? '');
@@ -100,21 +111,7 @@ const RegistryRowBase = memo(({ index, style, data }: RowComponentProps<{ data: 
             </div>
 
             <div className="w-20 px-2.5 py-1.5 text-muted-foreground font-mono text-[0.7rem] font-bold shrink-0">
-                {(() => {
-                    const t = activeVal?.type ?? backupVal?.type;
-                    switch (t) {
-                        case 1:
-                            return 'STRING';
-                        case 3:
-                            return 'BINARY';
-                        case 4:
-                            return 'DWORD';
-                        case 11:
-                            return 'QWORD';
-                        default:
-                            return `TYPE(${t ?? '?'})`;
-                    }
-                })()}
+                {registryValueTypeLabel(activeVal?.type ?? backupVal?.type)}
             </div>
 
             {/* Value Column(s) */}
@@ -195,7 +192,7 @@ const RegistryRow = RegistryRowBase as (props: RowComponentProps<{ data: RowData
 
 export function RegistryBackupPage() {
     const [backups, setBackups] = useState<RegistryBackupSnapshot[]>([]);
-    const [definitions, setDefinitions] = useState<Record<string, RegistryDefinition>>({});
+    const [definitions, setDefinitions] = useState<RegistryDefinitionIndex>({ exact: {}, templated: [] });
     const [loading, setLoading] = useState(true);
     const [wiping, setWiping] = useState(false);
     const [restoring, setRestoring] = useState(false);
@@ -232,7 +229,7 @@ export function RegistryBackupPage() {
             if (data.length > 0 && !selectedBackup) {
                 const live = data.find((b) => b.index === -1);
                 const vanilla = data.find((b) => b.name === 'Vanilla');
-                setSelectedBackup(vanilla || live || data[0]);
+                setSelectedBackup(vanilla ?? live ?? data[0] ?? null);
             }
         } catch (err) {
             setError(toErrorMessage(err));

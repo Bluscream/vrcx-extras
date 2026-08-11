@@ -74,7 +74,10 @@ export function PlayerPicker({
             query === '' &&
             selected.length > 0
         ) {
-            onRemove(selected[selected.length - 1].id);
+            const last = selected[selected.length - 1];
+            if (last) {
+                onRemove(last.id);
+            }
             return;
         }
         if (options.length === 0) {
@@ -92,7 +95,10 @@ export function PlayerPicker({
             );
         } else if (event.key === 'Enter' && isOpen) {
             event.preventDefault();
-            select(options[activeIndex]);
+            const option = options[activeIndex];
+            if (option) {
+                select(option);
+            }
         }
     }
 

@@ -1,4 +1,10 @@
-import type { DatabaseStatus, EntityDetailsResponse, OverlappingSession, Player, UnifiedSearchResults } from '@/types';
+import { isJsonObject } from '@/types';
+import {
+    parseCmdLineDefinitions,
+    parseRegistryDefinitions,
+    type RegistryDefinitionIndex
+} from '../../shared/definitions.ts';
+import type { CmdLineDefinition, DatabaseStatus, EntityDetailsResponse, JsonObject, OverlappingSession, Player, UnifiedSearchResults } from '@/types';
 
 export class ApiError extends Error {
     constructor(
@@ -128,10 +134,16 @@ export async function fetchVRChatConfig(signal?: AbortSignal): Promise<import('@
     return request<import('@/types').VRChatConfigResponse>('config', {}, signal);
 }
 
-export async function saveVRChatConfig(configOrRawText: string | Record<string, any>): Promise<{ success: boolean; message: string }> {
-    let configObj: Record<string, any>;
+export async function saveVRChatConfig(
+    configOrRawText: string | JsonObject
+): Promise<{ success: boolean; message: string }> {
+    let configObj: JsonObject;
     if (typeof configOrRawText === 'string') {
-        configObj = JSON.parse(configOrRawText);
+        const parsed: unknown = JSON.parse(configOrRawText);
+        if (!isJsonObject(parsed)) {
+            throw new ApiError('Config must be a JSON object', 400);
+        }
+        configObj = parsed;
     } else {
         configObj = configOrRawText;
     }
@@ -297,41 +309,14 @@ export async function clearServerDiskCache(): Promise<{ success: boolean }> {
     return response.json();
 }
 
-export async function fetchRegistryDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').RegistryDefinition>> {
+export async function fetchRegistryDefinitions(forceRefresh = false): Promise<RegistryDefinitionIndex> {
     try {
         const url = `/api/definitions/registry${forceRefresh ? '?refresh=true' : ''}`;
         const response = await fetch(url);
-        if (!response.ok) return {};
-        const text = await response.text();
-        const lines = text.split('\n');
-        const map: Record<string, import('@/types').RegistryDefinition> = {};
-
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-
-            const parts = line.match(/(?:^|,)(?:"([^"]*)"|([^,]*))/g)?.map((p) => {
-                let s = p.replace(/^,/, '').trim();
-                if (s.startsWith('"') && s.endsWith('"')) {
-                    s = s.slice(1, -1);
-                }
-                return s;
-            }) || [];
-
-            if (parts.length >= 3) {
-                const keyName = parts[0];
-                map[keyName] = {
-                    keyName,
-                    valueType: parts[1],
-                    description: parts[2],
-                    defaultValue: parts[3] || '',
-                    pattern: parts[4] || ''
-                };
-            }
-        }
-        return map;
+        if (!response.ok) return { exact: {}, templated: [] };
+        return parseRegistryDefinitions(await response.text());
     } catch {
-        return {};
+        return { exact: {}, templated: [] };
     }
 }
 
@@ -346,82 +331,23 @@ export async function fetchConfigSchema(forceRefresh = false): Promise<import('@
     }
 }
 
-/** Parse a single RFC-4180 CSV line respecting double-quoted fields. */
-function parseCSVLine(line: string): string[] {
-    const result: string[] = [];
-    let field = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-        const ch = line[i];
-        if (inQuotes) {
-            if (ch === '"') {
-                if (line[i + 1] === '"') { field += '"'; i++; }
-                else { inQuotes = false; }
-            } else {
-                field += ch;
-            }
-        } else {
-            if (ch === '"') { inQuotes = true; }
-            else if (ch === ',') { result.push(field); field = ''; }
-            else { field += ch; }
-        }
-    }
-    result.push(field);
-    return result;
-}
-
-export async function fetchCmdLineDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').CmdLineDefinition>> {
+export async function fetchCmdLineDefinitions(forceRefresh = false): Promise<Record<string, CmdLineDefinition>> {
     try {
         const url = `/api/definitions/cmdline${forceRefresh ? '?refresh=true' : ''}`;
         const response = await fetch(url);
         if (!response.ok) return {};
-        const text = await response.text();
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const map: Record<string, import('@/types').CmdLineDefinition> = {};
-
-        for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLine(lines[i]);
-            if (parts.length >= 3) {
-                const keyName = parts[0];
-                map[keyName] = {
-                    keyName,
-                    valueType: parts[1],
-                    description: parts[2].replace(/\\n/g, '\n'),
-                    defaultValue: parts[3] || '',
-                    pattern: parts[4] || ''
-                };
-            }
-        }
-        return map;
+        return parseCmdLineDefinitions(await response.text());
     } catch {
         return {};
     }
 }
 
-export async function fetchEnvDefinitions(forceRefresh = false): Promise<Record<string, import('@/types').CmdLineDefinition>> {
+export async function fetchEnvDefinitions(forceRefresh = false): Promise<Record<string, CmdLineDefinition>> {
     try {
         const url = `/api/definitions/env${forceRefresh ? '?refresh=true' : ''}`;
         const response = await fetch(url);
         if (!response.ok) return {};
-        const text = await response.text();
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        const map: Record<string, import('@/types').CmdLineDefinition> = {};
-
-        for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLine(lines[i]);
-            if (parts.length >= 3) {
-                const keyName = parts[0];
-                map[keyName] = {
-                    keyName,
-                    valueType: parts[1],
-                    description: parts[2].replace(/\\n/g, '\n'),
-                    defaultValue: parts[3] || '',
-                    pattern: parts[4] || ''
-                };
-            }
-        }
-        return map;
+        return parseCmdLineDefinitions(await response.text());
     } catch {
         return {};
     }

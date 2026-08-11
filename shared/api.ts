@@ -3,6 +3,7 @@
  * change to a response shape breaks compilation on whichever side is now wrong
  * instead of surfacing as an undefined field at runtime.
  */
+import type { JsonObject, JsonValue } from './json.ts';
 
 export interface Player {
     id: string;
@@ -169,9 +170,52 @@ export interface EntityDetailsResponse {
     instance?: InstanceDetails;
 }
 
+/**
+ * Registry payloads only ever hold a string (REG_SZ, or binary decoded to text
+ * or hex) or a number (REG_DWORD/REG_QWORD). Modelling it as a union rather
+ * than `any` forces the `typeof` narrowing that buildWineRegContent already
+ * does by hand, so a new branch cannot silently emit an unsupported value.
+ */
+export type RegistryValue = string | number;
+
+/**
+ * Windows registry value types, restricted to the ones VRChat writes.
+ * Kept numeric because that is what VRCX stores in its backup JSON.
+ */
+export const REGISTRY_VALUE_TYPE = {
+    string: 1,
+    binary: 3,
+    dword: 4,
+    qword: 11
+} as const;
+
+export type RegistryValueType = (typeof REGISTRY_VALUE_TYPE)[keyof typeof REGISTRY_VALUE_TYPE];
+
+const REGISTRY_VALUE_TYPES: readonly number[] = Object.values(REGISTRY_VALUE_TYPE);
+
+export function isRegistryValueType(value: unknown): value is RegistryValueType {
+    return typeof value === 'number' && REGISTRY_VALUE_TYPES.includes(value);
+}
+
+/** Human label for a value type, used in the registry table's type column. */
+export function registryValueTypeLabel(type: RegistryValueType | undefined): string {
+    switch (type) {
+        case REGISTRY_VALUE_TYPE.string:
+            return 'STRING';
+        case REGISTRY_VALUE_TYPE.binary:
+            return 'BINARY';
+        case REGISTRY_VALUE_TYPE.dword:
+            return 'DWORD';
+        case REGISTRY_VALUE_TYPE.qword:
+            return 'QWORD';
+        default:
+            return 'TYPE(?)';
+    }
+}
+
 export interface RegistryEntry {
-    type: number;
-    data: any;
+    type: RegistryValueType;
+    data: RegistryValue;
 }
 
 export interface RegistryBackupSnapshot {
@@ -198,17 +242,17 @@ export interface RegistryDefinition {
 export interface VRChatConfigResponse {
     filePath: string;
     exists: boolean;
-    config: Record<string, any>;
+    config: JsonObject;
     rawText: string;
 }
 
 export interface ConfigSchemaProperty {
     type?: string;
     description?: string;
-    default?: any;
+    default?: JsonValue;
     minimum?: number;
     maximum?: number;
-    examples?: any[];
+    examples?: JsonValue[];
     items?: {
         type?: string;
         enum?: string[];
@@ -256,6 +300,19 @@ export interface DefinitionUrls {
     env: string;
     registry: string;
     configSchema: string;
+}
+
+export type DefinitionName = keyof DefinitionUrls;
+
+export const DEFINITION_NAMES = ['cmdline', 'env', 'registry', 'configSchema'] as const satisfies readonly DefinitionName[];
+
+/**
+ * Guards the :name route param. `satisfies` above ties this list to the
+ * DefinitionUrls keys, so adding a definition without listing it here — or
+ * listing one that does not exist — fails to compile.
+ */
+export function isDefinitionName(value: unknown): value is DefinitionName {
+    return typeof value === 'string' && (DEFINITION_NAMES as readonly string[]).includes(value);
 }
 
 export interface AppPaths {

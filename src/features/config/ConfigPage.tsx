@@ -18,10 +18,58 @@ import {
     fetchConfigSchema,
     toErrorMessage
 } from '@/api/client';
-import type { ConfigSchema, ConfigSchemaProperty } from '@/types';
+import { isJsonObject, isJsonValue, toThrownMessage } from '@/types';
+import type { ConfigSchema, ConfigSchemaProperty, JsonObject, JsonValue } from '@/types';
+
+/** The data types the "Add Setting" form can produce. */
+const NEW_PROP_TYPES = ['string', 'number', 'boolean', 'json'] as const;
+type NewPropType = (typeof NEW_PROP_TYPES)[number];
+
+/**
+ * Renders a config value into a single-line input.
+ *
+ * Objects and arrays have no scalar representation, so they are shown as JSON
+ * rather than the "[object Object]" that a bare interpolation would produce.
+ */
+function toInputValue(value: JsonValue | undefined): string | number {
+    if (value === undefined || value === null) {
+        return '';
+    }
+    if (typeof value === 'string' || typeof value === 'number') {
+        return value;
+    }
+    if (typeof value === 'boolean') {
+        return String(value);
+    }
+    return JSON.stringify(value);
+}
+
+/**
+ * Converts edited input text back to the shape the field started with, so
+ * editing a nested object does not flatten it into a string.
+ */
+function fromInputValue(text: string, previous: JsonValue | undefined, wantsNumber: boolean): JsonValue {
+    if (wantsNumber) {
+        return Number(text);
+    }
+    if (previous !== null && typeof previous === 'object') {
+        try {
+            const decoded: unknown = JSON.parse(text);
+            return isJsonValue(decoded) ? decoded : text;
+        } catch {
+            return text;
+        }
+    }
+    return text;
+}
+
+/** Narrows the <select> value, which the DOM types only as string. */
+function toPropType(value: string): NewPropType {
+    return (NEW_PROP_TYPES as readonly string[]).includes(value) ? (value as NewPropType) : 'string';
+}
 
 export function ConfigPage() {
-    const [config, setConfig] = useState<Record<string, any>>({});
+    const [config, setConfig] = useState<JsonObject>({});
     const [rawText, setRawText] = useState<string>('{}');
     const [filePath, setFilePath] = useState<string>('');
     const [schema, setSchema] = useState<ConfigSchema>({});
@@ -36,7 +84,7 @@ export function ConfigPage() {
     // New Property Modal / Quick Add
     const [newPropKey, setNewPropKey] = useState('');
     const [newPropVal, setNewPropVal] = useState('');
-    const [newPropType, setNewPropType] = useState<'string' | 'number' | 'boolean' | 'json'>('string');
+    const [newPropType, setNewPropType] = useState<NewPropType>('string');
 
     useEffect(() => {
         loadData();
@@ -61,7 +109,7 @@ export function ConfigPage() {
         }
     };
 
-    const handleSave = async (updatedConfig: Record<string, any>) => {
+    const handleSave = async (updatedConfig: JsonObject) => {
         try {
             setSaving(true);
             setError(null);
@@ -79,14 +127,18 @@ export function ConfigPage() {
 
     const handleRawJsonSave = () => {
         try {
-            const parsed = JSON.parse(rawText);
-            handleSave(parsed);
-        } catch (err: any) {
-            setError(`JSON Syntax Error: ${err?.message}`);
+            const parsed: unknown = JSON.parse(rawText);
+            if (!isJsonObject(parsed)) {
+                setError('Config must be a JSON object.');
+                return;
+            }
+            void handleSave(parsed);
+        } catch (err: unknown) {
+            setError(`JSON Syntax Error: ${toThrownMessage(err, 'invalid JSON')}`);
         }
     };
 
-    const handleFieldChange = (key: string, value: any) => {
+    const handleFieldChange = (key: string, value: JsonValue) => {
         const next = { ...config, [key]: value };
         setConfig(next);
         setRawText(JSON.stringify(next, null, 2));
@@ -101,14 +153,17 @@ export function ConfigPage() {
 
     const handleAddProperty = () => {
         if (!newPropKey.trim()) return;
-        let parsedVal: any = newPropVal;
+        let parsedVal: JsonValue = newPropVal;
         if (newPropType === 'number') {
             parsedVal = Number(newPropVal) || 0;
         } else if (newPropType === 'boolean') {
             parsedVal = newPropVal === 'true' || newPropVal === '1';
         } else if (newPropType === 'json') {
             try {
-                parsedVal = JSON.parse(newPropVal);
+                // JSON.parse returns `any`; keep the value opaque until it is
+                // confirmed to be something representable in the config file.
+                const decoded: unknown = JSON.parse(newPropVal);
+                parsedVal = isJsonValue(decoded) ? decoded : newPropVal;
             } catch {
                 parsedVal = newPropVal;
             }
@@ -228,7 +283,7 @@ export function ConfigPage() {
                                 <label className="block text-muted-foreground mb-1 font-medium">Data Type</label>
                                 <select
                                     value={newPropType}
-                                    onChange={(e) => setNewPropType(e.target.value as any)}
+                                    onChange={(e) => setNewPropType(toPropType(e.target.value))}
                                     className="w-full h-8 rounded-md border bg-background px-2 outline-none focus:ring-2 focus:ring-primary/50"
                                 >
                                     <option value="string">String</option>
@@ -340,12 +395,16 @@ export function ConfigPage() {
                                             ) : (
                                                 <input
                                                     type={propDef?.type === 'integer' || typeof val === 'number' ? 'number' : 'text'}
-                                                    value={val ?? ''}
-                                                    placeholder={propDef?.default !== undefined ? `Default: ${propDef.default}` : ''}
+                                                    value={toInputValue(val)}
+                                                    placeholder={propDef?.default !== undefined ? `Default: ${String(propDef.default)}` : ''}
                                                     onChange={(e) =>
                                                         handleFieldChange(
                                                             key,
-                                                            propDef?.type === 'integer' || typeof val === 'number' ? Number(e.target.value) : e.target.value
+                                                            fromInputValue(
+                                                                e.target.value,
+                                                                val,
+                                                                propDef?.type === 'integer' || typeof val === 'number'
+                                                            )
                                                         )
                                                     }
                                                     className="w-full h-8 font-mono text-xs rounded-md border bg-background px-2.5 outline-none focus:ring-2 focus:ring-primary/50"

@@ -4,7 +4,15 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { getDb } from './db.ts';
-import type { RegistryBackupSnapshot, RegistryEntry } from '../shared/api.ts';
+import {
+    REGISTRY_VALUE_TYPE,
+    isRegistryValueType,
+    type RegistryBackupSnapshot,
+    type RegistryEntry,
+    type RegistryValue,
+    type RegistryValueType
+} from '../shared/api.ts';
+import { isJsonObject, toErrorMessage } from '../shared/json.ts';
 import { readSettings } from './settings.ts';
 
 const execFileAsync = promisify(execFile);
@@ -128,14 +136,19 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
                         cleanKey = rawKey.slice(0, hashIdx);
                     }
 
-                    let vtype = 1;
-                    let parsedData: any = rawVal;
+                    let vtype: RegistryValueType = REGISTRY_VALUE_TYPE.string;
+                    let parsedData: RegistryValue = rawVal;
 
                     if (regType === 'REG_DWORD') {
-                        vtype = 4;
+                        vtype = REGISTRY_VALUE_TYPE.dword;
                         parsedData = parseInt(rawVal.replace('0x', ''), 16) || 0;
+                    } else if (regType === 'REG_QWORD') {
+                        // Previously fell through to the string branch, so QWORD
+                        // keys (audio levels, for example) were typed as REG_SZ.
+                        vtype = REGISTRY_VALUE_TYPE.qword;
+                        parsedData = Number.parseInt(rawVal.replace('0x', ''), 16) || 0;
                     } else if (regType === 'REG_BINARY') {
-                        vtype = 3;
+                        vtype = REGISTRY_VALUE_TYPE.binary;
                         try {
                             const buf = Buffer.from(rawVal, 'hex');
                             let str = buf.toString('utf-8');
@@ -151,7 +164,7 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
                             parsedData = rawVal;
                         }
                     } else if (regType === 'REG_SZ') {
-                        vtype = 1;
+                        vtype = REGISTRY_VALUE_TYPE.string;
                         parsedData = rawVal;
                     }
 
@@ -175,8 +188,8 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
                 keyCount: Object.keys(entries).length,
                 entries
             };
-        } catch (err: any) {
-            console.warn('[RegistryService] Wine reg query failed, falling back to user.reg file parsing:', err?.message);
+        } catch (err: unknown) {
+            console.warn('[RegistryService] Wine reg query failed, falling back to user.reg file parsing:', toErrorMessage(err));
         }
     }
 
@@ -218,14 +231,14 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
                         cleanKey = rawKey.slice(0, hashIdx);
                     }
 
-                    let vtype = 1;
-                    let parsedData: any = rawVal;
+                    let vtype: RegistryValueType = REGISTRY_VALUE_TYPE.string;
+                    let parsedData: RegistryValue = rawVal;
 
                     if (rawVal.startsWith('dword:')) {
-                        vtype = 4;
+                        vtype = REGISTRY_VALUE_TYPE.dword;
                         parsedData = parseInt(rawVal.replace('dword:', ''), 16) || 0;
                     } else if (rawVal.startsWith('hex:')) {
-                        vtype = 3;
+                        vtype = REGISTRY_VALUE_TYPE.binary;
                         const hexStr = rawVal.replace('hex:', '').replace(/\\/g, '').replace(/,/g, '').trim();
                         try {
                             const buf = Buffer.from(hexStr, 'hex');
@@ -270,6 +283,40 @@ export async function readCurrentProtonRegistry(): Promise<RegistryBackupSnapsho
     }
 
     return null;
+}
+
+/**
+ * Validates the `data` map of a VRCX backup into typed registry entries.
+ *
+ * Entries whose type or value is not something the app can render or write back
+ * are dropped rather than coerced: a silently mistyped entry would be restored
+ * into the user's real Wine prefix as the wrong kind of value.
+ */
+function toRegistryEntries(raw: unknown): Record<string, RegistryEntry> {
+    if (!isJsonObject(raw)) {
+        return {};
+    }
+
+    const entries: Record<string, RegistryEntry> = {};
+    let skipped = 0;
+    for (const [key, value] of Object.entries(raw)) {
+        if (!isJsonObject(value)) {
+            skipped++;
+            continue;
+        }
+        const type = value['type'];
+        const data = value['data'];
+        if (!isRegistryValueType(type) || (typeof data !== 'string' && typeof data !== 'number')) {
+            skipped++;
+            continue;
+        }
+        entries[key] = { type, data };
+    }
+
+    if (skipped > 0) {
+        console.warn(`[RegistryService] Skipped ${skipped} malformed registry entries from the backup blob.`);
+    }
+    return entries;
 }
 
 /**
@@ -335,16 +382,22 @@ function loadRegistryBackupsFromDb(): RegistryBackupSnapshot[] {
         }
 
         console.log(`[RegistryService] Successfully loaded ${parsed.length} registry backups from DB.`);
-        const snapshots: RegistryBackupSnapshot[] = parsed.map((item: any, index: number) => {
-            const dataObj = typeof item.data === 'object' && item.data ? item.data : {};
-            const keyCount = Object.keys(dataObj).length;
+        const snapshots: RegistryBackupSnapshot[] = parsed.map((item: unknown, index: number) => {
+            // VRCX owns this JSON, so nothing here can be assumed. Each field is
+            // narrowed rather than asserted; a malformed entry degrades to a
+            // named empty snapshot instead of poisoning the table with undefined.
+            const record = isJsonObject(item) ? item : {};
+            const entries = toRegistryEntries(record['data']);
+            const name = typeof record['name'] === 'string' ? record['name'] : `Backup ${index + 1}`;
+            const date = typeof record['date'] === 'string' ? record['date'] : new Date().toISOString();
+
             return {
                 key: `backup_${index}`,
                 index,
-                name: item.name || `Backup ${index + 1}`,
-                date: item.date || new Date().toISOString(),
-                keyCount,
-                entries: dataObj
+                name,
+                date,
+                keyCount: Object.keys(entries).length,
+                entries
             };
         });
 
@@ -352,7 +405,7 @@ function loadRegistryBackupsFromDb(): RegistryBackupSnapshot[] {
         snapshots.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
         return snapshots;
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[RegistryService] Failed to parse JSON from config:vrcx_vrchatregistrybackups:', err);
         return [];
     }
@@ -567,9 +620,9 @@ export async function restoreRegistryBackup(index: number): Promise<{
             missingKeys,
             extraKeys
         };
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[RegistryService] Error executing Wine regedit:', err);
-        throw new Error(`Failed to execute regedit: ${err?.message || String(err)}`);
+        throw new Error(`Failed to execute regedit: ${toErrorMessage(err)}`);
     } finally {
         if (fs.existsSync(tempRegPath)) {
             fs.unlinkSync(tempRegPath);
@@ -596,8 +649,8 @@ export async function wipeProtonRegistry(): Promise<{ success: boolean; message:
                 }
             });
             console.log('[RegistryService] Wine reg delete command succeeded.');
-        } catch (err: any) {
-            console.warn('[RegistryService] Wine reg delete failed, falling back to direct user.reg section removal:', err?.message);
+        } catch (err: unknown) {
+            console.warn('[RegistryService] Wine reg delete failed, falling back to direct user.reg section removal:', toErrorMessage(err));
         }
     }
 
@@ -630,9 +683,9 @@ export async function wipeProtonRegistry(): Promise<{ success: boolean; message:
 
             fs.writeFileSync(userRegPath, newLines.join('\n'), 'utf-8');
             console.log(`[RegistryService] Successfully wiped ${removedCount} lines of VRChat registry keys from user.reg.`);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('[RegistryService] Failed to wipe user.reg section:', err);
-            throw new Error(`Failed to wipe user.reg section: ${err?.message || String(err)}`);
+            throw new Error(`Failed to wipe user.reg section: ${toErrorMessage(err)}`);
         }
     }
 
@@ -642,7 +695,11 @@ export async function wipeProtonRegistry(): Promise<{ success: boolean; message:
     };
 }
 
-export async function updateProtonRegistryKey(key: string, value: any, type: number): Promise<{ success: boolean; message: string }> {
+export async function updateProtonRegistryKey(
+    key: string,
+    value: RegistryValue,
+    type: RegistryValueType
+): Promise<{ success: boolean; message: string }> {
     console.log(`[RegistryService] Updating live key "${key}" = ${JSON.stringify(value)} (type ${type})...`);
     const prefix = findProtonPrefix();
     if (!prefix) {
@@ -680,8 +737,8 @@ export async function updateProtonRegistryKey(key: string, value: any, type: num
                 success: true,
                 message: `Successfully updated "${key}" in live Proton prefix.`
             };
-        } catch (err: any) {
-            console.warn('[RegistryService] Wine reg add failed, falling back to regedit file import:', err?.message);
+        } catch (err: unknown) {
+            console.warn('[RegistryService] Wine reg add failed, falling back to regedit file import:', toErrorMessage(err));
         }
     }
 
