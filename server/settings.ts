@@ -144,6 +144,11 @@ export function writeSettings(settings: AppSettings): boolean {
     }
 }
 
+export function resetSettings(): AppSettings {
+    writeSettings(DEFAULT_SETTINGS);
+    return DEFAULT_SETTINGS;
+}
+
 export function getDiskCacheStatus(): DiskCacheStatus {
     ensureDirsExist();
     const cacheDir = getCacheDir();

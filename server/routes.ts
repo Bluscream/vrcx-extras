@@ -26,6 +26,7 @@ import { readLaunchOptions, saveLaunchOptions, isSteamRunning, stopSteam, startS
 import {
     readSettings,
     writeSettings,
+    resetSettings,
     getDiskCacheStatus,
     clearDiskCache,
     fetchDefinitionContent
@@ -68,6 +69,15 @@ router.post('/settings', (req, res) => {
         res.json({ success, settings: readSettings() });
     } catch (err: any) {
         res.status(500).json({ error: err?.message || 'Failed to write settings' });
+    }
+});
+
+router.delete('/settings', (_req, res) => {
+    try {
+        const settings = resetSettings();
+        res.json({ success: true, message: 'Settings reset to defaults', settings });
+    } catch (err: any) {
+        res.status(500).json({ error: err?.message || 'Failed to reset settings' });
     }
 });
 

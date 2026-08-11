@@ -263,19 +263,25 @@ export function getCacheStatus(): { count: number; oldestAgeMinutes: number | nu
 
 
 
-export async function fetchServerSettings(): Promise<{ settings: import('@/types').AppSettings; diskCache: import('@/types').DiskCacheStatus }> {
+export async function fetchServerSettings(): Promise<import('@/types').SettingsResponse> {
     const response = await fetch('/api/settings');
     if (!response.ok) throw new ApiError('Failed to fetch settings', response.status);
     return response.json();
 }
 
-export async function saveServerSettings(settings: import('@/types').AppSettings): Promise<{ success: boolean; settings: import('@/types').AppSettings }> {
+export async function saveServerSettings(settings: import('@/types').AppSettings): Promise<import('@/types').SettingsSaveResponse> {
     const response = await fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings)
     });
     if (!response.ok) throw new ApiError('Failed to save settings', response.status);
+    return response.json();
+}
+
+export async function resetServerSettings(): Promise<import('@/types').SettingsResetResponse> {
+    const response = await fetch('/api/settings', { method: 'DELETE' });
+    if (!response.ok) throw new ApiError('Failed to reset settings', response.status);
     return response.json();
 }
 

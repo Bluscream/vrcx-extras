@@ -29,6 +29,9 @@ export type {
     CompatTool,
     AppSettings,
     DefinitionUrls,
-    DiskCacheStatus
+    DiskCacheStatus,
+    SettingsResponse,
+    SettingsSaveResponse,
+    SettingsResetResponse
 } from '../shared/api.ts';
 

@@ -279,6 +279,23 @@ export interface DiskCacheStatus {
     files: Array<{ name: string; ageMinutes: number; sizeBytes: number }>;
 }
 
+export interface SettingsResponse {
+    settings: AppSettings;
+    diskCache: DiskCacheStatus;
+}
+
+export interface SettingsSaveResponse {
+    success: boolean;
+    settings: AppSettings;
+}
+
+export interface SettingsResetResponse {
+    success: boolean;
+    message: string;
+    settings: AppSettings;
+}
+
+
 
 
 
