@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, memo } from 'react';
+import React, { useEffect, useState, useMemo, memo } from 'react';
 import {
     DatabaseIcon,
     RefreshCwIcon,
@@ -14,9 +14,7 @@ import {
     XCircleIcon
 } from 'lucide-react';
 
-import * as ReactWindowModule from 'react-window';
-
-const List: any = (ReactWindowModule as any).FixedSizeList || (ReactWindowModule as any).default?.FixedSizeList || (ReactWindowModule as any).default || ReactWindowModule;
+import { List } from 'react-window';
 
 import {
     fetchRegistryBackups,
@@ -476,19 +474,15 @@ export function RegistryBackupPage() {
                                 </div>
 
                                 <div className="flex-1 min-h-0">
-                                    {typeof List === 'function' ? (
-                                        <List
-                                            height={550}
-                                            itemCount={combinedKeys.length}
-                                            itemSize={36}
-                                            width="100%"
-                                            itemData={itemData}
-                                        >
-                                            {RegistryRow}
-                                        </List>
-                                    ) : (
-                                        <div className="p-4 text-center text-xs text-muted-foreground">Rendering list...</div>
-                                    )}
+                                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                    {React.createElement(List as any, {
+                                        height: 550,
+                                        itemCount: combinedKeys.length,
+                                        itemSize: 36,
+                                        width: '100%',
+                                        itemData: itemData,
+                                        children: (props: any) => <RegistryRow {...props} />
+                                    })}
                                 </div>
                             </div>
                         </>
