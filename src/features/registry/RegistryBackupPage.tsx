@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, memo } from 'react';
+import { useEffect, useState, useMemo, memo, type ReactElement } from 'react';
 import {
     DatabaseIcon,
     RefreshCwIcon,
@@ -14,7 +14,7 @@ import {
     XCircleIcon
 } from 'lucide-react';
 
-import { List } from 'react-window';
+import { List, type RowComponentProps } from 'react-window';
 
 import {
     fetchRegistryBackups,
@@ -43,7 +43,7 @@ interface RowData {
     setContextMenu: (v: { x: number; y: number; keyName: string; entry: RegistryEntry } | null) => void;
 }
 
-const RegistryRow = memo(({ index, style, data }: { index: number; style: React.CSSProperties; data: RowData }) => {
+const RegistryRowBase = memo(({ index, style, data }: RowComponentProps<{ data: RowData }>) => {
     const key = data.keys[index];
     const currentVal = data.currentLiveBackup?.entries?.[key];
     const backupVal = data.selectedBackup.entries?.[key];
@@ -186,7 +186,12 @@ const RegistryRow = memo(({ index, style, data }: { index: number; style: React.
     );
 });
 
-RegistryRow.displayName = 'RegistryRow';
+RegistryRowBase.displayName = 'RegistryRow';
+
+// React types a memo() result as returning ReactNode, while react-window's
+// rowComponent requires ReactElement | null. This component always returns an
+// element, so narrowing here is safe and keeps the List props fully checked.
+const RegistryRow = RegistryRowBase as (props: RowComponentProps<{ data: RowData }>) => ReactElement;
 
 export function RegistryBackupPage() {
     const [backups, setBackups] = useState<RegistryBackupSnapshot[]>([]);
@@ -474,15 +479,17 @@ export function RegistryBackupPage() {
                                 </div>
 
                                 <div className="flex-1 min-h-0">
-                                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                                    {React.createElement(List as any, {
-                                        height: 550,
-                                        itemCount: combinedKeys.length,
-                                        itemSize: 36,
-                                        width: '100%',
-                                        itemData: itemData,
-                                        children: (props: any) => <RegistryRow {...props} />
-                                    })}
+                                    {/* react-window v2: rows are declared via rowComponent/rowCount/
+                                        rowHeight, and rowProps is spread onto each row. The v1
+                                        itemCount/itemSize/itemData/children shape silently rendered
+                                        nothing and crashed on Object.values(rowProps). */}
+                                    <List
+                                        rowComponent={RegistryRow}
+                                        rowCount={combinedKeys.length}
+                                        rowHeight={36}
+                                        rowProps={{ data: itemData }}
+                                        style={{ height: '100%' }}
+                                    />
                                 </div>
                             </div>
                         </>
