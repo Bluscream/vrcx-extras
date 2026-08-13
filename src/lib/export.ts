@@ -168,6 +168,9 @@ export function generateHtmlReport(title: string, data: Record<string, unknown>[
     </div>
 
     <script>
+    // Wrapped in an IIFE: htmlpreview.github.io re-injects inline scripts when it
+    // renders the page, so top-level declarations must not leak into globals.
+    (function () {
         const data = ${jsonString};
         const searchInput = document.getElementById('search');
         const tableHead = document.getElementById('table-head');
@@ -235,6 +238,7 @@ export function generateHtmlReport(title: string, data: Record<string, unknown>[
         } else {
             tableBody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:2rem;">No data available.</td></tr>';
         }
+    })();
     </script>
 </body>
 </html>`;
@@ -249,18 +253,29 @@ function escapeHtml(str: string): string {
         .replace(/'/g, '&#039;');
 }
 
+export interface UploadReportResult {
+    /** Primary share link. */
+    url: string;
+    /** The stored file itself; identical to `url` for raw-HTML hosts. */
+    rawUrl?: string;
+    /** Always true — only providers that serve renderable text/html are used. */
+    renders: boolean;
+    localUrl?: string;
+    provider: string;
+    warning?: string;
+}
+
 /**
  * Uploads HTML string via server proxy endpoint `/api/upload` (to avoid CORS)
  */
 export async function uploadHtmlReport(
     htmlContent: string,
     filename: string,
-    provider: 'auto' | 'dpaste' | 'catbox' = 'auto'
-): Promise<{ url: string; localUrl?: string; provider: string }> {
+): Promise<UploadReportResult> {
     const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: htmlContent, filename, provider })
+        body: JSON.stringify({ content: htmlContent, filename })
     });
 
     if (!res.ok) {

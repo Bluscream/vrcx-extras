@@ -24,6 +24,7 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
     const [isOpen, setIsOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+    const [uploadNotice, setUploadNotice] = useState<string | null>(null);
     const [uploadError, setUploadError] = useState<string | null>(null);
     const { copiedKey, copy } = useCopyToClipboard();
 
@@ -43,14 +44,16 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
         setIsOpen(false);
     };
 
-    const handleUploadHtml = async (provider: 'auto' | 'dpaste' | 'catbox' = 'auto') => {
+    const handleUploadHtml = async () => {
         try {
             setUploading(true);
             setUploadError(null);
             setUploadedUrl(null);
+            setUploadNotice(null);
             const html = generateHtmlReport(title, data);
-            const res = await uploadHtmlReport(html, `${filenamePrefix}.html`, provider);
+            const res = await uploadHtmlReport(html, `${filenamePrefix}.html`);
             setUploadedUrl(res.url);
+            setUploadNotice(res.warning ?? null);
             // Automatically copy URL to clipboard
             await copy(res.url, 'uploaded-url');
         } catch (err: unknown) {
@@ -114,7 +117,7 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
                         </div>
                         <button
                             type="button"
-                            onClick={() => handleUploadHtml('auto')}
+                            onClick={handleUploadHtml}
                             disabled={uploading}
                             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs bg-primary/10 text-primary font-medium hover:bg-primary/20 disabled:opacity-50 transition-colors"
                         >
@@ -154,6 +157,9 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
                                         <ExternalLinkIcon className="size-3" />
                                     </a>
                                 </div>
+                                {uploadNotice && (
+                                    <div className="text-[0.68rem] text-amber-400">{uploadNotice}</div>
+                                )}
                             </div>
                         )}
 

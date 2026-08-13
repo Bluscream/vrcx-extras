@@ -527,54 +527,52 @@ router.get('/reports/:id', (req, res) => {
     res.send(report.content);
 });
 
-async function uploadToDpaste(content: string): Promise<string> {
-    const params = new URLSearchParams({
-        content,
-        format: 'url',
-        expiry_days: '30'
-    });
-
-    const res = await fetch('https://dpaste.com/api/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-        signal: AbortSignal.timeout(10000)
-    });
-
-    if (!res.ok) {
-        throw new Error(`dpaste returned HTTP ${res.status}`);
-    }
-
-    const rawUrl = (await res.text()).trim();
-    return rawUrl.endsWith('.raw') ? rawUrl : `${rawUrl}.raw`;
+interface UploadResult {
+    /** Link that opens the report as a live, interactive page in any browser. */
+    url: string;
+    /** Optional second rendering front-end for the same file. */
+    altUrl?: string;
+    /** The stored file itself (usually served as text/plain — source, not a page). */
+    rawUrl?: string;
+    /** false = the link downloads / shows source instead of rendering. */
+    renders: boolean;
 }
 
-async function uploadToCatbox(content: string, filename: string): Promise<string> {
-    const formData = new FormData();
-    formData.append('reqtype', 'fileupload');
-    const blob = new Blob([content], { type: 'text/html' });
-    formData.append('fileToUpload', blob, filename.endsWith('.html') ? filename : `${filename}.html`);
-
-    const res = await fetch('https://catbox.moe/user/api.php', {
+/**
+ * pastes.dev (bytebin) — no account, no API key, no token.
+ *
+ * bytebin stores the Content-Type it was posted with and returns the bytes as-is,
+ * so posting `text/html` yields a URL that browsers render as a real page.
+ * Verified in a browser: `document.contentType === 'text/html'`, no CSP, the
+ * report's inline JavaScript runs and the filter box works. 9 MB uploads accepted.
+ *
+ * Retention is not documented — treat these links as temporary.
+ */
+async function uploadToBytebin(content: string): Promise<UploadResult> {
+    const res = await fetch('https://api.pastes.dev/post', {
         method: 'POST',
-        body: formData,
-        signal: AbortSignal.timeout(10000)
+        headers: { 'Content-Type': 'text/html', 'User-Agent': 'vrcx-extras' },
+        body: content,
+        signal: AbortSignal.timeout(30000)
     });
 
     if (!res.ok) {
-        throw new Error(`Catbox returned HTTP ${res.status}`);
+        throw new Error(`pastes.dev returned HTTP ${res.status}`);
     }
 
-    const url = (await res.text()).trim();
-    if (!url.startsWith('http')) {
-        throw new Error(`Catbox error response: ${url}`);
+    const { key } = (await res.json()) as { key?: string };
+    if (!key) {
+        throw new Error('pastes.dev response contained no key');
     }
-    return url;
+
+    // api.pastes.dev/<key> serves the raw bytes with the stored content type;
+    // pastes.dev/<key> is the syntax-highlighting viewer, not the live page.
+    return { url: `https://api.pastes.dev/${key}`, rawUrl: `https://api.pastes.dev/${key}`, renders: true };
 }
 
 router.post('/upload', async (req, res) => {
     try {
-        const { content, filename = 'report.html', provider = 'auto' } = req.body || {};
+        const { content, filename = 'report.html' } = req.body || {};
         if (typeof content !== 'string' || !content.trim()) {
             res.status(400).json({ error: 'Field "content" (HTML string) is required' });
             return;
@@ -590,25 +588,19 @@ router.post('/upload', async (req, res) => {
 
         console.log(`[API] POST /api/upload — filename: ${filename}, stored locally at: ${localUrl}`);
 
-        // Ordered upload providers to attempt
-        const providers: Array<{ name: string; fn: () => Promise<string> }> = [];
-
-        if (provider === 'catbox') {
-            providers.push({ name: 'catbox', fn: () => uploadToCatbox(content, filename) });
-            providers.push({ name: 'dpaste', fn: () => uploadToDpaste(content) });
-        } else {
-            // Default ('auto' or 'dpaste'): prefer dpaste for raw HTML script execution, fallback to Catbox
-            providers.push({ name: 'dpaste', fn: () => uploadToDpaste(content) });
-            providers.push({ name: 'catbox', fn: () => uploadToCatbox(content, filename) });
-        }
+        // Only providers that need no login/token AND serve the file back as raw
+        // renderable text/html are kept. Anything requiring auth (GitHub Gist) or
+        // serving text/plain (Catbox, dpaste, 0x0.st) was removed deliberately —
+        // those links show source or download instead of opening the live report.
+        const providers = [{ name: 'pastes.dev', fn: () => uploadToBytebin(content) }];
 
         const errors: string[] = [];
         for (const p of providers) {
             try {
                 console.log(`[API] Uploading via ${p.name}…`);
-                const url = await p.fn();
-                console.log(`[API] Upload successful via ${p.name}: ${url}`);
-                res.json({ success: true, url, localUrl, provider: p.name });
+                const result = await p.fn();
+                console.log(`[API] Upload successful via ${p.name}: ${result.url}`);
+                res.json({ success: true, ...result, localUrl, provider: p.name });
                 return;
             } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : String(err);
@@ -618,7 +610,14 @@ router.post('/upload', async (req, res) => {
         }
 
         // If all remote services fail, return local server URL as guaranteed working fallback
-        res.json({ success: true, url: localUrl, localUrl, provider: 'local', warning: 'Remote upload failed; serving via local server.' });
+        res.json({
+            success: true,
+            url: localUrl,
+            localUrl,
+            provider: 'local',
+            renders: true,
+            warning: `Remote upload failed (${errors.join('; ')}); serving via local server — this link only works on your own network.`
+        });
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/upload:', err);
         res.status(500).json({ error: toErrorMessage(err, 'Failed to upload report file') });
