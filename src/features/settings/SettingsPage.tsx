@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { Button } from '@/ui/button';
+import { PageHeader, PageShell } from '@/components/layout/PageHeader';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
 import {
     RefreshCwIcon,
     GlobeIcon,
@@ -8,6 +12,7 @@ import {
     ExternalLinkIcon,
     HardDriveIcon,
     SlidersHorizontalIcon,
+    SettingsIcon,
     FolderIcon
 } from 'lucide-react';
 import {
@@ -53,6 +58,23 @@ export function SettingsPage() {
     const [clearedMsg, setClearedMsg] = useState(false);
     const [loading, setLoading] = useState(true);
     const [fetching, setFetching] = useState(false);
+
+    /** Flat key/value view of every persisted setting, for export. */
+    const exportRows = useMemo(() => {
+        return [
+            { section: 'cache', key: 'cacheTtlMinutes', value: String(settings.cacheTtlMinutes ?? '') },
+            ...Object.entries(settings.urls ?? {}).map(([key, value]) => ({
+                section: 'urls',
+                key,
+                value: String(value ?? '')
+            })),
+            ...Object.entries(settings.paths ?? {}).map(([key, value]) => ({
+                section: 'paths',
+                key,
+                value: String(value ?? '')
+            }))
+        ];
+    }, [settings]);
 
     const loadSettings = async () => {
         try {
@@ -125,47 +147,30 @@ export function SettingsPage() {
     }
 
     return (
-        <div className="flex h-full flex-col gap-6 overflow-y-auto p-6 max-w-4xl">
-            <div>
-                <h1 className="text-xl font-bold tracking-tight">Settings & Preferences</h1>
-                <p className="text-sm text-muted-foreground">
-                    Persisted directly to TOML configuration file on disk (<code className="font-mono text-xs">~/.config/vrcx-extras/config.toml</code>).
-                </p>
-            </div>
+        <PageShell className="max-w-4xl gap-6 overflow-y-auto">
+            <PageHeader
+                icon={SettingsIcon}
+                title="Settings & Preferences"
+                description="Persisted directly to a TOML configuration file on disk (~/.config/vrcx-extras/config.toml)."
+                actions={
+                    <ExportDropdown
+                        title="VRCX Extras Settings"
+                        filenamePrefix="vrcx_extras_settings"
+                        data={exportRows}
+                    />
+                }
+            />
 
-            {/* Modular Section Navigation Tabs */}
-            <div className="flex gap-2 border-b pb-3">
-                <button
-                    onClick={() => setActiveSection('cache')}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        activeSection === 'cache'
-                            ? 'bg-primary text-primary-foreground shadow-xs'
-                            : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                    <ClockIcon className="size-4" /> Cache & Prefetching
-                </button>
-                <button
-                    onClick={() => setActiveSection('urls')}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        activeSection === 'urls'
-                            ? 'bg-primary text-primary-foreground shadow-xs'
-                            : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                    <GlobeIcon className="size-4" /> Definition URLs
-                </button>
-                <button
-                    onClick={() => setActiveSection('paths')}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        activeSection === 'paths'
-                            ? 'bg-primary text-primary-foreground shadow-xs'
-                            : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-                    }`}
-                >
-                    <FolderIcon className="size-4" /> System Paths
-                </button>
-            </div>
+            <SegmentedTabs
+                value={activeSection}
+                onChange={setActiveSection}
+                options={[
+                    { value: 'cache' as const, label: 'Cache & Prefetching', icon: ClockIcon },
+                    { value: 'urls' as const, label: 'Definition URLs', icon: GlobeIcon },
+                    { value: 'paths' as const, label: 'System Paths', icon: FolderIcon }
+                ]}
+                className="self-start"
+            />
 
             {/* SECTION 1: Cache & TTL Slider */}
             {activeSection === 'cache' && (
@@ -220,12 +225,9 @@ export function SettingsPage() {
                         </div>
 
                         <div className="flex justify-end border-t pt-3">
-                            <button
-                                onClick={() => handleSave()}
-                                className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-                            >
+                            <Button size="sm" onClick={() => handleSave()}>
                                 Save Cache Settings
-                            </button>
+                            </Button>
                         </div>
                     </div>
 
@@ -258,14 +260,10 @@ export function SettingsPage() {
                         </div>
 
                         <div className="flex items-center gap-3 pt-2">
-                            <button
-                                onClick={handleClearDiskCache}
-                                disabled={fetching}
-                                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-                            >
-                                <RefreshCwIcon className={`size-3.5 ${fetching ? 'animate-spin' : ''}`} />
-                                {fetching ? 'Clearing & Re-downloading...' : 'Clear Disk Cache & Re-download Now'}
-                            </button>
+                            <Button size="sm" onClick={handleClearDiskCache} disabled={fetching}>
+                                <RefreshCwIcon className={fetching ? 'animate-spin' : ''} />
+                                {fetching ? 'Clearing & Re-downloading…' : 'Clear Disk Cache & Re-download Now'}
+                            </Button>
                             {clearedMsg && (
                                 <span className="flex items-center gap-1 text-xs text-emerald-500 font-medium">
                                     <CheckIcon className="size-4" /> Disk cache cleared & updated!
@@ -345,13 +343,9 @@ export function SettingsPage() {
                     </div>
 
                     <div className="flex items-center justify-between border-t pt-3">
-                        <button
-                            type="button"
-                            onClick={handleResetUrls}
-                            className="flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
-                        >
-                            <RotateCcwIcon className="size-3.5" /> Restore Default URLs
-                        </button>
+                        <Button variant="outline" size="sm" onClick={handleResetUrls}>
+                            <RotateCcwIcon /> Restore Default URLs
+                        </Button>
 
                         <div className="flex items-center gap-3">
                             {savedMsg && (
@@ -359,12 +353,9 @@ export function SettingsPage() {
                                     <CheckIcon className="size-4" /> Saved to config.toml!
                                 </span>
                             )}
-                            <button
-                                type="submit"
-                                className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-                            >
+                            <Button size="sm" type="submit">
                                 Save Settings
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </form>
@@ -418,13 +409,9 @@ export function SettingsPage() {
                     </div>
 
                     <div className="flex items-center justify-between border-t pt-3">
-                        <button
-                            type="button"
-                            onClick={handleResetPaths}
-                            className="flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 text-xs font-medium hover:bg-accent transition-colors"
-                        >
-                            <RotateCcwIcon className="size-3.5" /> Restore Default Paths
-                        </button>
+                        <Button variant="outline" size="sm" onClick={handleResetPaths}>
+                            <RotateCcwIcon /> Restore Default Paths
+                        </Button>
 
                         <div className="flex items-center gap-3">
                             {savedMsg && (
@@ -432,16 +419,13 @@ export function SettingsPage() {
                                     <CheckIcon className="size-4" /> Saved to config.toml!
                                 </span>
                             )}
-                            <button
-                                type="submit"
-                                className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-                            >
+                            <Button size="sm" type="submit">
                                 Save Settings
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </form>
             )}
-        </div>
+        </PageShell>
     );
 }

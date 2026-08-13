@@ -5,7 +5,6 @@ import {
     ChevronDownIcon,
     ChevronUpIcon,
     RefreshCwIcon,
-    AlertCircleIcon,
     UsersIcon,
 } from 'lucide-react';
 import { List } from 'react-window';
@@ -13,6 +12,9 @@ import { fetchUserTimeline } from '@/api/client';
 import { useSelectedPlayersParam } from '@/hooks/useSelectedPlayersParam';
 import { PlayerPicker } from '@/features/links/PlayerPicker';
 import { ExportDropdown } from '@/components/ExportDropdown';
+import { FilterInput } from '@/components/FilterInput';
+import { PageHeader, PageShell } from '@/components/layout/PageHeader';
+import { StatusBanner } from '@/components/StatusBanner';
 import type { Player, UserTimelineRow } from '@/types';
 import { Button } from '@/ui/button';
 
@@ -253,26 +255,21 @@ export function UserPage() {
 
 
     return (
-        <div className="flex h-full flex-col gap-4 p-6">
-            {/* Header */}
-            <header className="flex items-start justify-between gap-4">
-                <div>
-                    <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-                        <UsersIcon className="size-6 text-primary" />
-                        User Timeline
-                    </h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                        Look up one or more players to view every database entry involving them — join/leave events, feed updates, notifications, and notes.
-                    </p>
-                </div>
-                {rows && (
-                    <ExportDropdown
-                        title="User Timeline Report"
-                        filenamePrefix="user_timeline"
-                        data={filteredRows as unknown as Record<string, unknown>[]}
-                    />
-                )}
-            </header>
+        <PageShell>
+            <PageHeader
+                icon={UsersIcon}
+                title="User Timeline"
+                description="Look up one or more players to view every database entry involving them — join/leave events, feed updates, notifications, and notes."
+                actions={
+                    rows ? (
+                        <ExportDropdown
+                            title="User Timeline Report"
+                            filenamePrefix="user_timeline"
+                            data={filteredRows as unknown as Record<string, unknown>[]}
+                        />
+                    ) : null
+                }
+            />
 
             {/* Unified Player Picker */}
             <div className="rounded-xl border bg-card p-4 shadow-xs flex flex-col gap-3">
@@ -307,13 +304,7 @@ export function UserPage() {
                 </p>
             </div>
 
-            {/* Hydration or Fetch Error */}
-            {(error || hydrationError) && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                    <AlertCircleIcon className="size-5 shrink-0" />
-                    <span>{error || hydrationError}</span>
-                </div>
-            )}
+            {(error || hydrationError) && <StatusBanner>{error || hydrationError}</StatusBanner>}
 
             {/* Results */}
             {rows !== null && (
@@ -325,17 +316,13 @@ export function UserPage() {
                             {filteredRows.length !== total && <> of <span className="font-semibold text-foreground">{total.toLocaleString()}</span></>} rows
                         </span>
 
-                        <div className="relative flex-1 min-w-[180px] max-w-xs">
-                            <SearchIcon className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground pointer-events-none" />
-                            <input
-                                type="text"
-                                id="timeline-filter-search"
-                                placeholder="Filter results…"
-                                value={searchFilter}
-                                onChange={(e) => setSearchFilter(e.target.value)}
-                                className="h-8 w-full rounded-lg border bg-background pl-8 pr-3 text-xs outline-none focus:ring-2 focus:ring-primary/50"
-                            />
-                        </div>
+                        <FilterInput
+                            id="timeline-filter-search"
+                            placeholder="Filter results…"
+                            value={searchFilter}
+                            onChange={setSearchFilter}
+                            className="flex-1 min-w-[180px] max-w-xs"
+                        />
 
                         {/* Source filter pills */}
                         <div className="flex flex-wrap gap-1.5">
@@ -410,6 +397,6 @@ export function UserPage() {
                     <p className="text-sm">Select one or more players using the search bar above and click Search Timeline.</p>
                 </div>
             )}
-        </div>
+        </PageShell>
     );
 }

@@ -1,11 +1,13 @@
 import { useEffect, useState, useMemo, memo, type ReactElement } from 'react';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { FilterInput } from '@/components/FilterInput';
+import { PageHeader, PageShell } from '@/components/layout/PageHeader';
+import { StatusBanner } from '@/components/StatusBanner';
+import { Button } from '@/ui/button';
 import {
     DatabaseIcon,
     RefreshCwIcon,
     RotateCcwIcon,
-    SearchIcon,
-    ShieldAlertIcon,
-    CheckIcon,
     ActivityIcon,
     ArrowRightIcon,
     Trash2Icon,
@@ -348,6 +350,24 @@ export function RegistryBackupPage() {
         return Array.from(allKeysSet).sort().filter((key) => !q || key.toLowerCase().includes(q));
     }, [selectedBackup, currentLiveBackup, isComparingWithCurrent, entrySearch]);
 
+    /** One flat row per registry key, mirroring what the table shows. */
+    const exportRows = useMemo(() => {
+        return combinedKeys.map((key) => {
+            const backupEntry = selectedBackup?.entries?.[key];
+            const liveEntry = currentLiveBackup?.entries?.[key];
+            return {
+                key,
+                type: backupEntry?.type ?? liveEntry?.type ?? '',
+                ...(isComparingWithCurrent
+                    ? {
+                          current_value: liveEntry ? String(liveEntry.data) : null,
+                          backup_value: backupEntry ? String(backupEntry.data) : null
+                      }
+                    : { value: backupEntry ? String(backupEntry.data) : null })
+            };
+        });
+    }, [combinedKeys, selectedBackup, currentLiveBackup, isComparingWithCurrent]);
+
     const itemData: RowData = useMemo(() => ({
         keys: combinedKeys,
         currentLiveBackup,
@@ -375,48 +395,34 @@ export function RegistryBackupPage() {
     ]);
 
     return (
-        <div className="flex h-full flex-col gap-4 p-6 relative">
-            <header className="flex items-center justify-between">
-                <div>
-                    <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-                        <DatabaseIcon className="size-6 text-primary" />
-                        VRChat Linux Registry Browser & Inline Editor
-                    </h1>
-                    <p className="text-muted-foreground text-sm">
-                        Double-click any key name or value to edit inline directly in the table. Hover rows for VRCOSC definitions.
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={loadBackups}
-                        className="bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                    >
-                        <RefreshCwIcon className={`size-4 ${loading ? 'animate-spin' : ''}`} />
-                        Refresh
-                    </button>
-                    <button
-                        onClick={handleResetRegistry}
-                        disabled={wiping}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
-                    >
-                        <Trash2Icon className={`size-4 ${wiping ? 'animate-spin' : ''}`} />
-                        Reset
-                    </button>
-                </div>
-            </header>
+        <PageShell>
+            <PageHeader
+                icon={DatabaseIcon}
+                title="VRChat Linux Registry Browser & Inline Editor"
+                description="Double-click any key name or value to edit inline directly in the table. Hover rows for VRCOSC definitions."
+                actions={
+                    <>
+                        {selectedBackup && combinedKeys.length > 0 && (
+                            <ExportDropdown
+                                title={`Registry — ${selectedBackup.name}`}
+                                filenamePrefix="vrchat_registry"
+                                data={exportRows}
+                            />
+                        )}
+                        <Button variant="secondary" onClick={loadBackups}>
+                            <RefreshCwIcon className={loading ? 'animate-spin' : ''} />
+                            Refresh
+                        </Button>
+                        <Button variant="destructive" onClick={handleResetRegistry} disabled={wiping}>
+                            <Trash2Icon className={wiping ? 'animate-spin' : ''} />
+                            Reset
+                        </Button>
+                    </>
+                }
+            />
 
-            {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                    <ShieldAlertIcon className="size-5 shrink-0" />
-                    <span>{error}</span>
-                </div>
-            )}
-            {statusMessage && (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 text-sm text-emerald-600 dark:text-emerald-400">
-                    <CheckIcon className="size-5 shrink-0" />
-                    <span>{statusMessage}</span>
-                </div>
-            )}
+            {error && <StatusBanner>{error}</StatusBanner>}
+            {statusMessage && <StatusBanner variant="success">{statusMessage}</StatusBanner>}
 
             <div className="flex min-h-0 flex-1 gap-6">
                 <div className="flex w-80 shrink-0 flex-col gap-2 rounded-xl border bg-card p-3 shadow-xs">
@@ -467,22 +473,22 @@ export function RegistryBackupPage() {
                                     </h2>
                                 </div>
                                 {isComparingWithCurrent && (
-                                    <button
+                                    <Button
+                                        size="sm"
                                         onClick={() => handleRestoreBackup(selectedBackup.index)}
                                         disabled={restoring}
-                                        className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium shadow-xs transition-colors disabled:opacity-50"
                                     >
-                                        <RotateCcwIcon className={`size-3.5 ${restoring ? 'animate-spin' : ''}`} />
+                                        <RotateCcwIcon className={restoring ? 'animate-spin' : ''} />
                                         Restore Selected Backup
-                                    </button>
+                                    </Button>
                                 )}
                             </div>
-                            <div className="flex items-center gap-2">
-                                <div className="relative flex-1">
-                                    <SearchIcon className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-                                    <input type="text" placeholder="Search keys (e.g. Wing, AUDIO)..." value={entrySearch} onChange={(e) => setEntrySearch(e.target.value)} className="h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-xs outline-none focus:ring-2 focus:ring-primary/50" />
-                                </div>
-                            </div>
+                            <FilterInput
+                                placeholder="Search keys (e.g. Wing, AUDIO)…"
+                                value={entrySearch}
+                                onChange={setEntrySearch}
+                                className="sm:max-w-none"
+                            />
 
                             <div className="flex-1 overflow-hidden rounded-lg border flex flex-col">
                                 <div className="flex items-center bg-muted text-muted-foreground font-medium text-xs border-b shrink-0">
@@ -526,6 +532,6 @@ export function RegistryBackupPage() {
                     <button onClick={() => { startInlineEdit(contextMenu.keyName, 'value', contextMenu.entry); setContextMenu(null); }} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent text-left"><Edit3Icon className="size-3.5 text-emerald-500" /> Edit Key Value Inline</button>
                 </div>
             )}
-        </div>
+        </PageShell>
     );
 }

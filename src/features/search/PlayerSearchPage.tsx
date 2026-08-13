@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 
 import { fetchEntityDetails, isAbortError, toErrorMessage, unifiedSearch } from '@/api/client';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { PageHeader, PageShell } from '@/components/layout/PageHeader';
 import { PlayerMarkers } from '@/features/links/PlayerMarkers';
 import { formatRelative } from '@/lib/format';
 import type { EntityDetailsResponse, UnifiedSearchResults } from '@/types';
@@ -11,6 +13,19 @@ import { Button } from '@/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/card';
 import { Empty, EmptyDescription, EmptyMedia, EmptyTitle } from '@/ui/empty';
 import { Spinner } from '@/ui/spinner';
+
+/** Flattens the per-category search results into one plain row list. */
+function toExportRows(results: UnifiedSearchResults) {
+    return Object.entries(results).flatMap(([category, items]) =>
+        (items as UnifiedSearchResults['players']).map((item) => ({
+            category,
+            title: item.title,
+            subtitle: item.subtitle ?? '',
+            id: item.id,
+            url: item.targetUrl
+        }))
+    );
+}
 
 export function PlayerSearchPage() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -97,7 +112,22 @@ export function PlayerSearchPage() {
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 p-4 md:p-6">
+        <PageShell width="prose" className="gap-6">
+            <PageHeader
+                icon={UserSearchIcon}
+                title={entityDetails ? 'Entity Details' : 'Universal Search'}
+                description="Search players, worlds, avatars and instances recorded in your VRCX database."
+                actions={
+                    searchResults ? (
+                        <ExportDropdown
+                            title={`Search Results — ${searchQuery}`}
+                            filenamePrefix="search_results"
+                            data={toExportRows(searchResults)}
+                        />
+                    ) : null
+                }
+            />
+
             {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                     <Spinner className="size-6" />
@@ -718,6 +748,6 @@ export function PlayerSearchPage() {
                     </EmptyDescription>
                 </Empty>
             )}
-        </div>
+        </PageShell>
     );
 }

@@ -1,17 +1,16 @@
-import {
-    AlertCircleIcon,
-    FilterIcon,
-    SearchIcon,
-    UsersIcon
-} from 'lucide-react';
+import { LinkIcon, SearchIcon, UsersIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { FilterInput } from '@/components/FilterInput';
 import { useReportResultCount } from '@/components/layout/AppShellLayout';
+import { PageHeader, PageShell } from '@/components/layout/PageHeader';
+import { StatusBanner } from '@/components/StatusBanner';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useLinkFinder } from '@/hooks/useLinkFinder';
 import { useSelectedPlayersParam } from '@/hooks/useSelectedPlayersParam';
-import { buildLaunchUri } from '@/lib/format';
+import { buildLaunchUri, formatDateTime, formatDuration } from '@/lib/format';
 import type { OverlappingSession, Player } from '@/types';
 import { Button } from '@/ui/button';
 import { Card, CardContent } from '@/ui/card';
@@ -21,7 +20,6 @@ import {
     EmptyMedia,
     EmptyTitle
 } from '@/ui/empty';
-import { Input } from '@/ui/input';
 import { Spinner } from '@/ui/spinner';
 
 import { PlayerPicker } from './PlayerPicker';
@@ -43,6 +41,24 @@ function matchesFilter(session: OverlappingSession, needle: string) {
         ) ??
             false)
     );
+}
+
+/** Flattens sessions into one plain row per meetup for CSV/JSON/HTML export. */
+function toExportRows(sessions: OverlappingSession[]) {
+    return sessions.map((session) => ({
+        world: session.worldName,
+        world_id: session.worldId,
+        location: session.location,
+        access_type: session.accessType,
+        joined_at: formatDateTime(session.joinedAt),
+        left_at: formatDateTime(session.leftAt),
+        duration: formatDuration(session.durationMs),
+        duration_ms: session.durationMs,
+        participants: session.participants
+            .map((participant) => participant.displayName)
+            .join(', '),
+        instance_total_users: session.roster?.total ?? null
+    }));
 }
 
 export function LinkFinderPage() {
@@ -112,7 +128,22 @@ export function LinkFinderPage() {
     const canSearch = selected.length > 0 && !isLoading && !isHydrating;
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4">
+        <PageShell width="prose">
+            <PageHeader
+                icon={LinkIcon}
+                title="Instance Links"
+                description="Find every instance two or more players were recorded in together, straight from your read-only VRCX database."
+                actions={
+                    filteredResults && filteredResults.length > 0 ? (
+                        <ExportDropdown
+                            title="Shared Instances Report"
+                            filenamePrefix="instance_links"
+                            data={toExportRows(filteredResults)}
+                        />
+                    ) : null
+                }
+            />
+
             {/*
               * Card clips its children so image corners stay rounded, which
               * would also clip the player picker's popup. This card holds no
@@ -139,34 +170,21 @@ export function LinkFinderPage() {
                 </CardContent>
             </Card>
 
-            {hydrationError ? (
-                <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-lg px-3 py-2 text-sm">
-                    <AlertCircleIcon className="size-4 shrink-0" />
-                    {hydrationError}
-                </div>
-            ) : null}
+            {hydrationError ? <StatusBanner>{hydrationError}</StatusBanner> : null}
 
-            {error ? (
-                <div className="text-destructive bg-destructive/10 flex items-center gap-2 rounded-lg px-3 py-2 text-sm">
-                    <AlertCircleIcon className="size-4 shrink-0" />
-                    {error}
-                </div>
-            ) : null}
+            {error ? <StatusBanner>{error}</StatusBanner> : null}
 
             {filteredResults && filteredResults.length > 0 ? (
                 <SessionStats sessions={filteredResults} />
             ) : null}
 
             {results && results.length > 0 ? (
-                <div className="relative w-full sm:max-w-64 sm:self-end">
-                    <FilterIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
-                    <Input
-                        placeholder="Filter instances…"
-                        value={filter}
-                        onChange={(event) => setFilter(event.target.value)}
-                        className="pl-7.5"
-                    />
-                </div>
+                <FilterInput
+                    placeholder="Filter instances…"
+                    value={filter}
+                    onChange={setFilter}
+                    className="sm:self-end"
+                />
             ) : null}
 
             {isLoading || isHydrating ? (
@@ -211,6 +229,6 @@ export function LinkFinderPage() {
                     }
                 />
             )}
-        </div>
+        </PageShell>
     );
 }

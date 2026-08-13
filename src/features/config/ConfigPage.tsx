@@ -1,4 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
+import { PageHeader, PageShell } from '@/components/layout/PageHeader';
+import { StatusBanner } from '@/components/StatusBanner';
+import { Button } from '@/ui/button';
 import {
     FileJsonIcon,
     RefreshCwIcon,
@@ -6,8 +11,6 @@ import {
     PlusIcon,
     Trash2Icon,
     InfoIcon,
-    CheckIcon,
-    ShieldAlertIcon,
     CodeIcon,
     ListIcon
 } from 'lucide-react';
@@ -185,68 +188,63 @@ export function ConfigPage() {
         return Array.from(set).sort();
     }, [knownKeys, config]);
 
-    return (
-        <div className="flex h-full flex-col gap-4 p-4 sm:p-6 relative">
-            <header className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                    <h1 className="flex items-center gap-2 text-xl sm:text-2xl font-bold tracking-tight">
-                        <FileJsonIcon className="size-6 shrink-0 text-primary" />
-                        VRChat Config Manager (`config.json`)
-                    </h1>
-                    <p className="text-muted-foreground text-sm font-mono truncate max-w-2xl" title={filePath}>
-                        {filePath || 'AppData/LocalLow/VRChat/VRChat/config.json'}
-                    </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center rounded-lg border bg-muted p-1 text-xs">
-                        <button
-                            onClick={() => setViewMode('form')}
-                            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-colors ${
-                                viewMode === 'form' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                        >
-                            <ListIcon className="size-3.5" /> Visual Form
-                        </button>
-                        <button
-                            onClick={() => setViewMode('json')}
-                            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition-colors ${
-                                viewMode === 'json' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                        >
-                            <CodeIcon className="size-3.5" /> Raw JSON
-                        </button>
-                    </div>
+    /** One flat row per config key, mirroring what the form shows. */
+    const exportRows = useMemo(() => {
+        return activeKeys.map((key) => {
+            const value = config[key];
+            const propDef = schema.properties?.[key];
+            return {
+                key,
+                value: value === undefined ? null : typeof value === 'object' ? JSON.stringify(value) : String(value),
+                type: propDef?.type ?? (value === undefined ? '' : typeof value),
+                set: value !== undefined,
+                known: knownKeys.includes(key),
+                description: propDef?.description ?? '',
+                default: propDef?.default === undefined ? '' : String(propDef.default)
+            };
+        });
+    }, [activeKeys, config, schema, knownKeys]);
 
-                    <button
-                        onClick={loadData}
-                        className="bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                    >
-                        <RefreshCwIcon className={`size-4 ${loading ? 'animate-spin' : ''}`} />
+    return (
+        <PageShell>
+            <PageHeader
+                icon={FileJsonIcon}
+                title="VRChat Config Manager (config.json)"
+                description={filePath || 'AppData/LocalLow/VRChat/VRChat/config.json'}
+                mono
+                actions={
+                    <>
+                    <SegmentedTabs
+                        value={viewMode}
+                        onChange={setViewMode}
+                        options={[
+                            { value: 'form' as const, label: 'Visual Form', icon: ListIcon },
+                            { value: 'json' as const, label: 'Raw JSON', icon: CodeIcon }
+                        ]}
+                    />
+
+                    <ExportDropdown
+                        title="VRChat Config"
+                        filenamePrefix="vrchat_config"
+                        data={exportRows}
+                    />
+                    <Button variant="secondary" onClick={loadData}>
+                        <RefreshCwIcon className={loading ? 'animate-spin' : ''} />
                         Refresh
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={() => (viewMode === 'form' ? handleSave(config) : handleRawJsonSave())}
                         disabled={saving}
-                        className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium shadow-xs transition-colors disabled:opacity-50"
                     >
-                        <SaveIcon className={`size-4 ${saving ? 'animate-spin' : ''}`} />
+                        <SaveIcon className={saving ? 'animate-spin' : ''} />
                         Save Config
-                    </button>
-                </div>
-            </header>
+                    </Button>
+                    </>
+                }
+            />
 
-            {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                    <ShieldAlertIcon className="size-5 shrink-0" />
-                    <span>{error}</span>
-                </div>
-            )}
-            {statusMessage && (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 text-sm text-emerald-600 dark:text-emerald-400">
-                    <CheckIcon className="size-5 shrink-0" />
-                    <span>{statusMessage}</span>
-                </div>
-            )}
+            {error && <StatusBanner>{error}</StatusBanner>}
+            {statusMessage && <StatusBanner variant="success">{statusMessage}</StatusBanner>}
 
             {viewMode === 'json' ? (
                 <div className="flex-1 flex flex-col rounded-xl border bg-card p-4 shadow-xs">
@@ -418,6 +416,6 @@ export function ConfigPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </PageShell>
     );
 }

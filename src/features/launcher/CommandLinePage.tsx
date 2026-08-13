@@ -1,9 +1,13 @@
 import { useEffect, useState, useMemo } from 'react';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { FilterInput } from '@/components/FilterInput';
+import { PageHeader, PageShell } from '@/components/layout/PageHeader';
+import { StatusBanner } from '@/components/StatusBanner';
+import { Button } from '@/ui/button';
 import {
     TerminalIcon,
     RefreshCwIcon,
     SaveIcon,
-    ShieldAlertIcon,
     CheckIcon,
     PowerIcon,
     InfoIcon,
@@ -11,9 +15,7 @@ import {
     PlayIcon,
     SquareIcon,
     WrenchIcon,
-    ChevronDownIcon,
-    SearchIcon,
-    XIcon
+    ChevronDownIcon
 } from 'lucide-react';
 
 import {
@@ -162,6 +164,30 @@ export function CommandLinePage() {
     // ---------------------------------------------------------------------------
     const parsed = useMemo(() => parseLaunchOptions(rawLaunchOptions), [rawLaunchOptions]);
 
+    /**
+     * One flat row per known env var / flag, with whether it is currently on
+     * and the value in effect — the same information the two columns show.
+     */
+    const exportRows = useMemo(() => {
+        const envRows = Object.values(envDefs ?? {}).map((def) => ({
+            kind: 'env' as const,
+            name: def.keyName,
+            active: parsed.envVars[def.keyName] !== undefined,
+            value: parsed.envVars[def.keyName] ?? '',
+            default: def.defaultValue ?? '',
+            description: def.description ?? ''
+        }));
+        const flagRows = Object.values(cmdDefs ?? {}).map((def) => ({
+            kind: 'flag' as const,
+            name: def.keyName,
+            active: parsed.flags.has(def.keyName) || parsed.kvArgs[def.keyName] !== undefined,
+            value: parsed.kvArgs[def.keyName] ?? '',
+            default: def.defaultValue ?? '',
+            description: def.description ?? ''
+        }));
+        return [...envRows, ...flagRows];
+    }, [envDefs, cmdDefs, parsed]);
+
     useEffect(() => { loadData(); }, []);
 
     const loadData = async () => {
@@ -303,19 +329,14 @@ export function CommandLinePage() {
     // Render
     // ---------------------------------------------------------------------------
     return (
-        <div className="flex h-full flex-col gap-4 p-6 relative" onClick={() => setCompatToolDropdownOpen(false)}>
-            <header className="flex items-center justify-between">
-                <div>
-                    <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-                        <TerminalIcon className="size-6 text-primary" />
-                        VRChat Steam Launch Options &amp; Environment Manager
-                    </h1>
-                    <p className="text-muted-foreground text-sm font-mono truncate max-w-2xl" title={filePath}>
-                        {filePath || 'userdata/.../config/localconfig.vdf'}
-                    </p>
-                </div>
-
-                <div className="flex items-center gap-2">
+        <PageShell onClick={() => setCompatToolDropdownOpen(false)}>
+            <PageHeader
+                icon={TerminalIcon}
+                title="VRChat Steam Launch Options & Environment Manager"
+                description={filePath || 'userdata/.../config/localconfig.vdf'}
+                mono
+                actions={
+                    <>
                     {/* Steam status pill: green=closed (safe to edit), red=running (risky) */}
                     <span className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
                         steamRunning
@@ -373,40 +394,29 @@ export function CommandLinePage() {
                         )}
                     </div>
 
-                    <button
-                        onClick={loadData}
-                        className="bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                    >
-                        <RefreshCwIcon className={`size-4 ${loading ? 'animate-spin' : ''}`} />
+                    <ExportDropdown
+                        title="Launch Options & Environment"
+                        filenamePrefix="launch_options"
+                        data={exportRows}
+                    />
+                    <Button variant="secondary" onClick={loadData}>
+                        <RefreshCwIcon className={loading ? 'animate-spin' : ''} />
                         Refresh
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={handleSaveInitiate}
                         disabled={saving || !isDirty}
-                        className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-semibold shadow-xs transition-all disabled:opacity-40 ${
-                            isDirty
-                                ? 'bg-primary text-primary-foreground hover:bg-primary/90 ring-2 ring-primary/50 ring-offset-1 ring-offset-background animate-pulse'
-                                : 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        }`}
+                        className={isDirty ? 'ring-primary/50 ring-offset-background animate-pulse ring-2 ring-offset-1' : ''}
                     >
-                        <SaveIcon className={`size-4 ${saving ? 'animate-spin' : ''}`} />
+                        <SaveIcon className={saving ? 'animate-spin' : ''} />
                         Save{isDirty ? ' *' : ''}
-                    </button>
-                </div>
-            </header>
+                    </Button>
+                    </>
+                }
+            />
 
-            {error && (
-                <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                    <ShieldAlertIcon className="size-5 shrink-0" />
-                    <span>{error}</span>
-                </div>
-            )}
-            {statusMessage && (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 p-3 text-sm text-emerald-600 dark:text-emerald-400">
-                    <CheckIcon className="size-5 shrink-0" />
-                    <span>{statusMessage}</span>
-                </div>
-            )}
+            {error && <StatusBanner>{error}</StatusBanner>}
+            {statusMessage && <StatusBanner variant="success">{statusMessage}</StatusBanner>}
 
             <div className="flex flex-col gap-4 min-h-0 flex-1">
 
@@ -440,24 +450,12 @@ export function CommandLinePage() {
                             <span className="ml-auto font-mono text-[0.65rem] text-muted-foreground">env.csv</span>
                         </h2>
                         {/* Filter bar */}
-                        <div className="relative mb-2.5">
-                            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-                            <input
-                                type="text"
-                                value={envFilter}
-                                onChange={(e) => setEnvFilter(e.target.value)}
-                                placeholder="Filter env vars…"
-                                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border bg-muted/40 outline-none focus:ring-2 focus:ring-primary/40 font-mono"
-                            />
-                            {envFilter && (
-                                <button
-                                    onClick={() => setEnvFilter('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    <XIcon className="size-3.5" />
-                                </button>
-                            )}
-                        </div>
+                        <FilterInput
+                            value={envFilter}
+                            onChange={setEnvFilter}
+                            placeholder="Filter env vars…"
+                            className="mb-2.5 sm:max-w-none"
+                        />
                         <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                             {Object.values(envDefs ?? {})
                                 .sort((a, b) => {
@@ -515,24 +513,12 @@ export function CommandLinePage() {
                             <span className="ml-auto font-mono text-[0.65rem] text-muted-foreground">cmdline.csv</span>
                         </h2>
                         {/* Filter bar */}
-                        <div className="relative mb-2.5">
-                            <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-                            <input
-                                type="text"
-                                value={cmdFilter}
-                                onChange={(e) => setCmdFilter(e.target.value)}
-                                placeholder="Filter flags…"
-                                className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border bg-muted/40 outline-none focus:ring-2 focus:ring-primary/40 font-mono"
-                            />
-                            {cmdFilter && (
-                                <button
-                                    onClick={() => setCmdFilter('')}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                    <XIcon className="size-3.5" />
-                                </button>
-                            )}
-                        </div>
+                        <FilterInput
+                            value={cmdFilter}
+                            onChange={setCmdFilter}
+                            placeholder="Filter flags…"
+                            className="mb-2.5 sm:max-w-none"
+                        />
                         <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                             {Object.values(cmdDefs ?? {})
                                 .sort((a, b) => {
@@ -641,7 +627,6 @@ export function CommandLinePage() {
                     </div>
                 </div>
             )}
-        </div>
+        </PageShell>
     );
 }
-
