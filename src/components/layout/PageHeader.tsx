@@ -5,23 +5,13 @@ import { cn } from '@/lib/utils';
 
 /**
  * Outer wrapper every page uses, so padding, gap and scroll behaviour match.
- *
- * `width="full"` fills the pane (tables, editors that want the space);
- * `width="prose"` centres a readable column (search results, link finder).
+ * Every page fills the pane — pages that scroll their whole body add
+ * `overflow-y-auto`, pages with an internal virtualised list manage their own.
  */
-export function PageShell({
-    width = 'full',
-    className,
-    children,
-    ...props
-}: ComponentProps<'div'> & { width?: 'full' | 'prose' }) {
+export function PageShell({ className, children, ...props }: ComponentProps<'div'>) {
     return (
         <div
-            className={cn(
-                'relative flex flex-col gap-4 p-4 sm:p-6',
-                width === 'full' ? 'h-full' : 'mx-auto w-full max-w-5xl flex-1',
-                className
-            )}
+            className={cn('relative flex h-full flex-col gap-4 p-4 sm:p-6', className)}
             {...props}
         >
             {children}

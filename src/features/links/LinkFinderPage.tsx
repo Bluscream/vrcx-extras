@@ -128,7 +128,7 @@ export function LinkFinderPage() {
     const canSearch = selected.length > 0 && !isLoading && !isHydrating;
 
     return (
-        <PageShell width="prose">
+        <PageShell className="overflow-y-auto">
             <PageHeader
                 icon={LinkIcon}
                 title="Instance Links"

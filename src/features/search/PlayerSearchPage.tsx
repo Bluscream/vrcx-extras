@@ -112,7 +112,7 @@ export function PlayerSearchPage() {
     }
 
     return (
-        <PageShell width="prose" className="gap-6">
+        <PageShell className="gap-6 overflow-y-auto">
             <PageHeader
                 icon={UserSearchIcon}
                 title={entityDetails ? 'Entity Details' : 'Universal Search'}

@@ -147,7 +147,7 @@ export function SettingsPage() {
     }
 
     return (
-        <PageShell className="max-w-4xl gap-6 overflow-y-auto">
+        <PageShell className="gap-6 overflow-y-auto">
             <PageHeader
                 icon={SettingsIcon}
                 title="Settings & Preferences"
