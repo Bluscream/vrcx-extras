@@ -502,3 +502,42 @@ router.get('/user/timeline', (req, res) => {
         res.status(500).json({ error: toErrorMessage(err, 'Failed to query user timeline') });
     }
 });
+
+// ─── Upload Proxy (HTML Report Sharing) ────────────────────────────────────────
+
+router.post('/upload', async (req, res) => {
+    try {
+        const { content, filename = 'report.html', provider = 'catbox' } = req.body || {};
+        if (typeof content !== 'string' || !content.trim()) {
+            res.status(400).json({ error: 'Field "content" (HTML string) is required' });
+            return;
+        }
+
+        console.log(`[API] POST /api/upload — uploading ${filename} via ${provider}`);
+
+        if (provider === 'catbox') {
+            const formData = new FormData();
+            formData.append('reqtype', 'fileupload');
+            const blob = new Blob([content], { type: 'text/html' });
+            formData.append('fileToUpload', blob, filename.endsWith('.html') ? filename : `${filename}.html`);
+
+            const catboxRes = await fetch('https://catbox.moe/user/api.php', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!catboxRes.ok) {
+                throw new Error(`Catbox error: ${catboxRes.statusText}`);
+            }
+
+            const url = (await catboxRes.text()).trim();
+            res.json({ success: true, url, provider: 'catbox' });
+        } else {
+            res.status(400).json({ error: `Unsupported provider: ${provider}` });
+        }
+    } catch (err: unknown) {
+        console.error('[API] Error in POST /api/upload:', err);
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to upload report file') });
+    }
+});
+

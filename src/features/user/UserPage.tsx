@@ -4,7 +4,6 @@ import {
     SearchIcon,
     ChevronDownIcon,
     ChevronUpIcon,
-    DownloadIcon,
     RefreshCwIcon,
     AlertCircleIcon,
     UsersIcon,
@@ -13,6 +12,7 @@ import { List } from 'react-window';
 import { fetchUserTimeline } from '@/api/client';
 import { useSelectedPlayersParam } from '@/hooks/useSelectedPlayersParam';
 import { PlayerPicker } from '@/features/links/PlayerPicker';
+import { ExportDropdown } from '@/components/ExportDropdown';
 import type { Player, UserTimelineRow } from '@/types';
 import { Button } from '@/ui/button';
 
@@ -250,25 +250,7 @@ export function UserPage() {
         [expandedIdx, filteredRows]
     );
 
-    function exportData(format: 'json' | 'csv') {
-        if (!filteredRows.length) return;
-        if (format === 'json') {
-            const blob = new Blob([JSON.stringify(filteredRows, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = 'user_timeline.json'; a.click();
-        } else {
-            const headers = ['created_at', 'source', 'type', 'user_id', 'display_name', 'detail'];
-            const lines = [
-                headers.join(','),
-                ...filteredRows.map((r) =>
-                    headers.map((h) => JSON.stringify(String((r as unknown as Record<string, unknown>)[h] ?? ''))).join(',')
-                )
-            ];
-            const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a'); a.href = url; a.download = 'user_timeline.csv'; a.click();
-        }
-    }
+
 
     return (
         <div className="flex h-full flex-col gap-4 p-6">
@@ -284,20 +266,11 @@ export function UserPage() {
                     </p>
                 </div>
                 {rows && (
-                    <div className="flex items-center gap-2 shrink-0">
-                        <button
-                            onClick={() => exportData('csv')}
-                            className="flex items-center gap-1.5 rounded-lg border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
-                        >
-                            <DownloadIcon className="size-3.5" /> CSV
-                        </button>
-                        <button
-                            onClick={() => exportData('json')}
-                            className="flex items-center gap-1.5 rounded-lg border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-secondary/80 transition-colors"
-                        >
-                            <DownloadIcon className="size-3.5" /> JSON
-                        </button>
-                    </div>
+                    <ExportDropdown
+                        title="User Timeline Report"
+                        filenamePrefix="user_timeline"
+                        data={filteredRows as unknown as Record<string, unknown>[]}
+                    />
                 )}
             </header>
 
