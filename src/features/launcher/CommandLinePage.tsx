@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { ExportDropdown } from '@/components/ExportDropdown';
+import { Modal } from '@/components/Modal';
 import { FilterInput } from '@/components/FilterInput';
 import { PageHeader, PageShell } from '@/components/layout/PageHeader';
 import { StatusBanner } from '@/components/StatusBanner';
@@ -567,66 +568,49 @@ export function CommandLinePage() {
             </div>
 
             {/* Dialog: Stop Steam before saving */}
-            {showStopDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-                    <div className="w-full max-w-md rounded-xl border bg-card p-5 shadow-2xl space-y-4">
-                        <div className="flex items-center gap-3 text-amber-500">
-                            <SquareIcon className="size-6 shrink-0" />
-                            <h3 className="text-base font-semibold text-foreground">Steam Process Active</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                            Steam is currently running. Would you like to gracefully stop it before saving?
-                        </p>
-                        <div className="flex items-center justify-between pt-2 border-t">
-                            <button
-                                onClick={() => { setShowStopDialog(false); setPendingSave(null); }}
-                                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleStopDialogChoice(false)} className="px-3.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-accent transition-colors">
-                                    No, Save Directly
-                                </button>
-                                <button onClick={() => handleStopDialogChoice(true)} className="px-3.5 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 transition-colors">
-                                    Yes, Stop Steam
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <Modal
+                open={showStopDialog}
+                onClose={() => { setShowStopDialog(false); setPendingSave(null); }}
+                title="Steam Process Active"
+                icon={<SquareIcon className="size-6 shrink-0 text-amber-500" />}
+                description="Steam is currently running. Would you like to gracefully stop it before saving?"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => { setShowStopDialog(false); setPendingSave(null); }}>
+                            Cancel
+                        </Button>
+                        <Button variant="outline" onClick={() => handleStopDialogChoice(false)}>
+                            No, Save Directly
+                        </Button>
+                        <Button onClick={() => handleStopDialogChoice(true)}>
+                            Yes, Stop Steam
+                        </Button>
+                    </>
+                }
+            />
 
             {/* Dialog: Restart Steam after saving */}
-            {showRestartDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-                    <div className="w-full max-w-md rounded-xl border bg-card p-5 shadow-2xl space-y-4">
-                        <div className="flex items-center gap-3 text-emerald-500">
-                            <PlayIcon className="size-6 shrink-0" />
-                            <h3 className="text-base font-semibold text-foreground">Restart Steam?</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                            Steam will be gracefully closed. Would you like to automatically restart it once saving finishes?
-                        </p>
-                        <div className="flex items-center justify-between pt-2 border-t">
-                            <button
-                                onClick={() => { setShowRestartDialog(false); setPendingSave(null); }}
-                                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <div className="flex gap-2">
-                                <button onClick={() => handleRestartDialogChoice(false)} className="px-3.5 py-1.5 rounded-lg border text-xs font-medium hover:bg-accent transition-colors">
-                                    No, Keep Closed
-                                </button>
-                                <button onClick={() => handleRestartDialogChoice(true)} className="px-3.5 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600 transition-colors">
-                                    Yes, Restart Steam
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <Modal
+                open={showRestartDialog}
+                onClose={() => { setShowRestartDialog(false); setPendingSave(null); }}
+                title="Restart Steam?"
+                icon={<PlayIcon className="size-6 shrink-0 text-emerald-500" />}
+                description="Steam will be gracefully closed. Would you like to automatically restart it once saving finishes?"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => { setShowRestartDialog(false); setPendingSave(null); }}>
+                            Cancel
+                        </Button>
+                        <Button variant="outline" onClick={() => handleRestartDialogChoice(false)}>
+                            No, Keep Closed
+                        </Button>
+                        <Button onClick={() => handleRestartDialogChoice(true)}>
+                            Yes, Restart Steam
+                        </Button>
+                    </>
+                }
+            />
+
         </PageShell>
     );
 }

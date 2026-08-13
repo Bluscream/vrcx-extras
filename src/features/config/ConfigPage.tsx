@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { ExportDropdown } from '@/components/ExportDropdown';
+import { Modal } from '@/components/Modal';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { PageHeader, PageShell } from '@/components/layout/PageHeader';
 import { StatusBanner } from '@/components/StatusBanner';
@@ -88,6 +89,7 @@ export function ConfigPage() {
     const [newPropKey, setNewPropKey] = useState('');
     const [newPropVal, setNewPropVal] = useState('');
     const [newPropType, setNewPropType] = useState<NewPropType>('string');
+    const [addOpen, setAddOpen] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -177,6 +179,8 @@ export function ConfigPage() {
         setRawText(JSON.stringify(next, null, 2));
         setNewPropKey('');
         setNewPropVal('');
+        setNewPropType('string');
+        setAddOpen(false);
     };
 
     const knownKeys = useMemo(() => {
@@ -228,6 +232,10 @@ export function ConfigPage() {
                         filenamePrefix="vrchat_config"
                         data={exportRows}
                     />
+                    <Button variant="outline" onClick={() => setAddOpen(true)}>
+                        <PlusIcon />
+                        Add
+                    </Button>
                     <Button variant="secondary" onClick={loadData}>
                         <RefreshCwIcon className={loading ? 'animate-spin' : ''} />
                         Refresh
@@ -260,55 +268,7 @@ export function ConfigPage() {
                     />
                 </div>
             ) : (
-                <div className="flex flex-1 flex-col lg:flex-row gap-4 lg:gap-6 min-h-0">
-                    {/* Add Custom Setting Card */}
-                    <div className="w-full lg:w-80 shrink-0 flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs">
-                        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                            <PlusIcon className="size-4 text-primary" /> Add Setting
-                        </h2>
-                        <div className="space-y-3 text-xs">
-                            <div>
-                                <label className="block text-muted-foreground mb-1 font-medium">Property Key</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. cache_size"
-                                    value={newPropKey}
-                                    onChange={(e) => setNewPropKey(e.target.value)}
-                                    className="w-full h-8 rounded-md border bg-background px-2.5 outline-none focus:ring-2 focus:ring-primary/50"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-muted-foreground mb-1 font-medium">Data Type</label>
-                                <select
-                                    value={newPropType}
-                                    onChange={(e) => setNewPropType(toPropType(e.target.value))}
-                                    className="w-full h-8 rounded-md border bg-background px-2 outline-none focus:ring-2 focus:ring-primary/50"
-                                >
-                                    <option value="string">String</option>
-                                    <option value="number">Number / Integer</option>
-                                    <option value="boolean">Boolean (true / false)</option>
-                                    <option value="json">Array / JSON Object</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-muted-foreground mb-1 font-medium">Initial Value</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. 30"
-                                    value={newPropVal}
-                                    onChange={(e) => setNewPropVal(e.target.value)}
-                                    className="w-full h-8 rounded-md border bg-background px-2.5 outline-none focus:ring-2 focus:ring-primary/50"
-                                />
-                            </div>
-                            <button
-                                onClick={handleAddProperty}
-                                className="w-full h-8 bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium rounded-md flex items-center justify-center gap-1.5 transition-colors"
-                            >
-                                <PlusIcon className="size-3.5" /> Set Property
-                            </button>
-                        </div>
-                    </div>
-
+                <div className="flex min-h-0 flex-1 flex-col">
                     {/* Settings Form List */}
                     {/* One column on phones, more as the viewport widens. `content-start`
                         keeps rows from stretching when the grid is taller than its rows. */}
@@ -416,6 +376,78 @@ export function ConfigPage() {
                     </div>
                 </div>
             )}
+
+            <Modal
+                open={addOpen}
+                onClose={() => setAddOpen(false)}
+                title="Add Setting"
+                description="Define a key that is not part of the known schema. It is written to config.json when you save."
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setAddOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleAddProperty} disabled={!newPropKey.trim()}>
+                            <PlusIcon />
+                            Set Property
+                        </Button>
+                    </>
+                }
+            >
+                <form
+                    className="space-y-3 text-xs"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        handleAddProperty();
+                    }}
+                >
+                    <div>
+                        <label htmlFor="new-prop-key" className="text-muted-foreground mb-1 block font-medium">
+                            Property Key
+                        </label>
+                        <input
+                            id="new-prop-key"
+                            type="text"
+                            autoFocus
+                            placeholder="e.g. cache_size"
+                            value={newPropKey}
+                            onChange={(e) => setNewPropKey(e.target.value)}
+                            className="focus:ring-primary/50 bg-background h-8 w-full rounded-md border px-2.5 outline-none focus:ring-2"
+                        />
+                    </div>
+                    <div>
+                        <label htmlFor="new-prop-type" className="text-muted-foreground mb-1 block font-medium">
+                            Data Type
+                        </label>
+                        <select
+                            id="new-prop-type"
+                            value={newPropType}
+                            onChange={(e) => setNewPropType(toPropType(e.target.value))}
+                            className="focus:ring-primary/50 bg-background h-8 w-full rounded-md border px-2 outline-none focus:ring-2"
+                        >
+                            <option value="string">String</option>
+                            <option value="number">Number / Integer</option>
+                            <option value="boolean">Boolean (true / false)</option>
+                            <option value="json">Array / JSON Object</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="new-prop-value" className="text-muted-foreground mb-1 block font-medium">
+                            Initial Value
+                        </label>
+                        <input
+                            id="new-prop-value"
+                            type="text"
+                            placeholder="e.g. 30"
+                            value={newPropVal}
+                            onChange={(e) => setNewPropVal(e.target.value)}
+                            className="focus:ring-primary/50 bg-background h-8 w-full rounded-md border px-2.5 outline-none focus:ring-2"
+                        />
+                    </div>
+                    {/* Enables Enter-to-submit without a visible duplicate button. */}
+                    <button type="submit" className="hidden" />
+                </form>
+            </Modal>
         </PageShell>
     );
 }
