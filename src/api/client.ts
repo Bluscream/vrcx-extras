@@ -4,7 +4,7 @@ import {
     parseRegistryDefinitions,
     type RegistryDefinitionIndex
 } from '../../shared/definitions.ts';
-import type { CmdLineDefinition, DatabaseStatus, RegistryValueType, EntityDetailsResponse, JsonObject, OverlappingSession, Player, UnifiedSearchResults } from '@/types';
+import type { CmdLineDefinition, DatabaseStatus, RegistryValueType, EntityDetailsResponse, JsonObject, OverlappingSession, Player, UnifiedSearchResults, UserTimelineResponse } from '@/types';
 
 export class ApiError extends Error {
     constructor(
@@ -396,6 +396,13 @@ export async function prefetchAllDefinitionsAndConfig() {
         fetchVRChatConfig()
     ]);
 }
-
-
-
+export function fetchUserTimeline(
+    userIds: string[],
+    displayNames: string[],
+    signal?: AbortSignal
+) {
+    const params: Record<string, string> = {};
+    if (userIds.length > 0) params.ids = userIds.join(',');
+    if (displayNames.length > 0) params.names = displayNames.join(',');
+    return request<UserTimelineResponse>('user/timeline', params, signal);
+}

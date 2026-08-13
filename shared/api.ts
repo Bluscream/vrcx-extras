@@ -356,8 +356,26 @@ export interface SettingsResetResponse {
     settings: AppSettings;
 }
 
+export interface UserTimelineRow {
+    /** Which DB table this row came from */
+    source: string;
+    /** Event type within that table (e.g. "OnPlayerJoined", "invite", "gps") */
+    type: string;
+    /** ISO timestamp string */
+    created_at: string;
+    user_id: string | null;
+    display_name: string | null;
+    /** Short human-readable summary of the event */
+    detail: string;
+    /** Full raw row as returned from the DB */
+    raw: Record<string, unknown>;
+}
 
-
-
+export interface UserTimelineResponse {
+    rows: UserTimelineRow[];
+    total: number;
+    userIds: string[];
+    displayNames: string[];
+}
 
 

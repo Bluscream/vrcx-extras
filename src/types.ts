@@ -34,7 +34,9 @@ export type {
     DiskCacheStatus,
     SettingsResponse,
     SettingsSaveResponse,
-    SettingsResetResponse
+    SettingsResetResponse,
+    UserTimelineRow,
+    UserTimelineResponse
 } from '../shared/api.ts';
 
 // Value exports (not just types): shared runtime helpers for the registry table.

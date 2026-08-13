@@ -29,6 +29,7 @@ import {
 } from './registry.ts';
 import { readVRChatConfig, saveVRChatConfig } from './config.ts';
 import { readLaunchOptions, saveLaunchOptions, isSteamRunning, stopSteam, startSteam, saveCompatTool } from './launcher.ts';
+import { getUserTimeline } from './user.ts';
 
 import {
     readSettings,
@@ -475,5 +476,29 @@ router.post('/launcher/compat-tool', async (req, res) => {
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/launcher/compat-tool:', err);
         res.status(500).json({ error: toErrorMessage(err, 'Failed to save compat tool') });
+    }
+});
+
+// ─── User Timeline ────────────────────────────────────────────────────────────
+
+router.get('/user/timeline', (req, res) => {
+    try {
+        console.log('[API] GET /api/user/timeline');
+        const rawIds = typeof req.query.ids === 'string' ? req.query.ids : '';
+        const rawNames = typeof req.query.names === 'string' ? req.query.names : '';
+
+        const userIds = rawIds.split(',').map((s) => s.trim()).filter(Boolean);
+        const displayNames = rawNames.split(',').map((s) => s.trim()).filter(Boolean);
+
+        if (userIds.length === 0 && displayNames.length === 0) {
+            res.status(400).json({ error: 'Provide at least one user id (ids=) or display name (names=)' });
+            return;
+        }
+
+        const rows = getUserTimeline(userIds, displayNames);
+        res.json({ rows, total: rows.length, userIds, displayNames });
+    } catch (err: unknown) {
+        console.error('[API] Error in GET /api/user/timeline:', err);
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to query user timeline') });
     }
 });
