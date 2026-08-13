@@ -43,13 +43,13 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
         setIsOpen(false);
     };
 
-    const handleUploadHtml = async () => {
+    const handleUploadHtml = async (provider: 'dpaste' | 'catbox' = 'dpaste') => {
         try {
             setUploading(true);
             setUploadError(null);
             setUploadedUrl(null);
             const html = generateHtmlReport(title, data);
-            const url = await uploadHtmlReport(html, `${filenamePrefix}.html`, 'catbox');
+            const url = await uploadHtmlReport(html, `${filenamePrefix}.html`, provider);
             setUploadedUrl(url);
             // Automatically copy URL to clipboard
             await copy(url, 'uploaded-url');
@@ -78,7 +78,7 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
                     <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
 
                     {/* Menu Popover */}
-                    <div className="absolute right-0 z-50 mt-2 w-64 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-xl ring-1 ring-border/40 animate-in fade-in-0 zoom-in-95">
+                    <div className="absolute right-0 z-50 mt-2 w-72 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-xl ring-1 ring-border/40 animate-in fade-in-0 zoom-in-95">
                         <div className="px-2 py-1.5 text-[0.7rem] font-semibold text-muted-foreground uppercase tracking-wider">
                             Save Locally
                         </div>
@@ -110,11 +110,11 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
                         <div className="my-1 border-t border-border/50" />
 
                         <div className="px-2 py-1.5 text-[0.7rem] font-semibold text-muted-foreground uppercase tracking-wider">
-                            Upload & Share
+                            Upload & Share Link
                         </div>
                         <button
                             type="button"
-                            onClick={handleUploadHtml}
+                            onClick={() => handleUploadHtml('dpaste')}
                             disabled={uploading}
                             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs bg-primary/10 text-primary font-medium hover:bg-primary/20 disabled:opacity-50 transition-colors"
                         >
@@ -123,7 +123,16 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
                             ) : (
                                 <GlobeIcon className="size-4 text-primary" />
                             )}
-                            {uploading ? 'Uploading to Catbox…' : 'Upload HTML & Get Share Link'}
+                            {uploading ? 'Uploading HTML report…' : 'Upload Interactive Report (dpaste)'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleUploadHtml('catbox')}
+                            disabled={uploading}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50 transition-colors mt-0.5 text-muted-foreground hover:text-foreground"
+                        >
+                            <GlobeIcon className="size-4 text-muted-foreground" />
+                            Upload Raw File (Catbox.moe)
                         </button>
 
                         {/* Upload Result Notification */}

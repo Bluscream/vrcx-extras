@@ -255,7 +255,7 @@ function escapeHtml(str: string): string {
 export async function uploadHtmlReport(
     htmlContent: string,
     filename: string,
-    provider: 'catbox' | 'litterbox' | 'transfersh' = 'catbox'
+    provider: 'dpaste' | 'catbox' = 'dpaste'
 ): Promise<string> {
     const res = await fetch('/api/upload', {
         method: 'POST',

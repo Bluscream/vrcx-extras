@@ -515,7 +515,28 @@ router.post('/upload', async (req, res) => {
 
         console.log(`[API] POST /api/upload — uploading ${filename} via ${provider}`);
 
-        if (provider === 'catbox') {
+        if (provider === 'dpaste') {
+            const params = new URLSearchParams({
+                content,
+                format: 'url',
+                expiry_days: '30'
+            });
+
+            const dpasteRes = await fetch('https://dpaste.com/api/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: params.toString()
+            });
+
+            if (!dpasteRes.ok) {
+                throw new Error(`dpaste error: ${dpasteRes.statusText}`);
+            }
+
+            const rawUrl = (await dpasteRes.text()).trim();
+            // Append .raw so browsers render the raw HTML document directly
+            const url = rawUrl.endsWith('.raw') ? rawUrl : `${rawUrl}.raw`;
+            res.json({ success: true, url, provider: 'dpaste' });
+        } else if (provider === 'catbox') {
             const formData = new FormData();
             formData.append('reqtype', 'fileupload');
             const blob = new Blob([content], { type: 'text/html' });
