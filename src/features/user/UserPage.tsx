@@ -422,7 +422,7 @@ export function UserPage() {
                                     rowCount: filteredRows.length,
                                     rowHeight: getItemSize,
                                     rowProps: { data: itemData },
-                                    style: { height: Math.max(300, window.innerHeight - 380) }
+                                    style: { height: '100%' }
                                 })}
                             </div>
                         )}
