@@ -459,7 +459,7 @@ export function CommandLinePage() {
                             )}
                         </div>
                         <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-                            {Object.values(envDefs)
+                            {Object.values(envDefs ?? {})
                                 .sort((a, b) => {
                                     const aOn = isEnvActive(a.keyName) ? 0 : 1;
                                     const bOn = isEnvActive(b.keyName) ? 0 : 1;
@@ -534,7 +534,7 @@ export function CommandLinePage() {
                             )}
                         </div>
                         <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
-                            {Object.values(cmdDefs)
+                            {Object.values(cmdDefs ?? {})
                                 .sort((a, b) => {
                                     const aOn = isFlagActive(a.keyName) ? 0 : 1;
                                     const bOn = isFlagActive(b.keyName) ? 0 : 1;
