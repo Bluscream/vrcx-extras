@@ -110,11 +110,11 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
                         <div className="my-1 border-t border-border/50" />
 
                         <div className="px-2 py-1.5 text-[0.7rem] font-semibold text-muted-foreground uppercase tracking-wider">
-                            Upload & Share Link
+                            Share Link
                         </div>
                         <button
                             type="button"
-                            onClick={() => handleUploadHtml('dpaste')}
+                            onClick={() => handleUploadHtml('auto')}
                             disabled={uploading}
                             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs bg-primary/10 text-primary font-medium hover:bg-primary/20 disabled:opacity-50 transition-colors"
                         >
@@ -123,16 +123,7 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
                             ) : (
                                 <GlobeIcon className="size-4 text-primary" />
                             )}
-                            {uploading ? 'Uploading HTML report…' : 'Upload Interactive Report (dpaste)'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleUploadHtml('catbox')}
-                            disabled={uploading}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-accent disabled:opacity-50 transition-colors mt-0.5 text-muted-foreground hover:text-foreground"
-                        >
-                            <GlobeIcon className="size-4 text-muted-foreground" />
-                            Upload Raw File (Catbox.moe)
+                            {uploading ? 'Generating Share Link…' : 'Share Interactive Report Link'}
                         </button>
 
                         {/* Upload Result Notification */}

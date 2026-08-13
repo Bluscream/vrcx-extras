@@ -10,8 +10,8 @@
         "build": "npm run typecheck && vite build",
         "embed:dist": "node scripts/embed-dist.mjs",
         "package:bundle": "npm run embed:dist && npx esbuild server.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist-server/server.cjs && node scripts/embed-dist.mjs --reset",
-        "package:linux": "npm run build && npm run package:bundle && npx @yao-pkg/pkg --sea dist-server/server.cjs -o build/vrcx-extras",
-        "package:win": "npm run build && npm run package:bundle && npx @yao-pkg/pkg --sea dist-server/server.cjs -t node22-win-x64 -o build/vrcx-extras.exe",
+        "package:linux": "npm run build && npm run package:bundle && VRCX_NO_WINDOW=1 npx -y @yao-pkg/pkg@6.22.0 --sea dist-server/server.cjs -o build/vrcx-extras",
+        "package:win": "npm run build && npm run package:bundle && VRCX_NO_WINDOW=1 npx -y @yao-pkg/pkg@6.22.0 --sea dist-server/server.cjs -t node22-win-x64 -o build/vrcx-extras.exe",
         "package:all": "npm run package:linux && npm run package:win",
         "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json"
     },
