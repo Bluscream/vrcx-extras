@@ -75,7 +75,7 @@ interface RowItemData {
 
 const TimelineRow = memo(({ index, style, data }: { index: number; style: React.CSSProperties; data: RowItemData }) => {
     const row = data.rows[index];
-    if (!row) return null;
+    if (!row) return <div style={style} />;
     const isExpanded = data.expandedIdx === index;
 
     return (
@@ -418,12 +418,11 @@ export function UserPage() {
                         ) : (
                             <div className="flex-1 min-h-0">
                                 {React.createElement(List as any, {
-                                    height: Math.max(300, window.innerHeight - 380),
-                                    itemCount: filteredRows.length,
-                                    itemSize: getItemSize,
-                                    width: '100%',
-                                    itemData: itemData,
-                                    children: (props: any) => <TimelineRow {...props} />
+                                    rowComponent: TimelineRow,
+                                    rowCount: filteredRows.length,
+                                    rowHeight: getItemSize,
+                                    rowProps: { data: itemData },
+                                    style: { height: Math.max(300, window.innerHeight - 380) }
                                 })}
                             </div>
                         )}
