@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo, useRef, useEffect, memo } from '
 import {
     UserIcon,
     SearchIcon,
-    XIcon,
     ChevronDownIcon,
     ChevronUpIcon,
     DownloadIcon,
@@ -12,7 +11,10 @@ import {
 } from 'lucide-react';
 import { List } from 'react-window';
 import { fetchUserTimeline } from '@/api/client';
-import type { UserTimelineRow } from '@/types';
+import { useSelectedPlayersParam } from '@/hooks/useSelectedPlayersParam';
+import { PlayerPicker } from '@/features/links/PlayerPicker';
+import type { Player, UserTimelineRow } from '@/types';
+import { Button } from '@/ui/button';
 
 // ─── Source / type badge colours ─────────────────────────────────────────────
 
@@ -61,72 +63,6 @@ function formatTs(ts: string): string {
     const d = new Date(ts);
     if (isNaN(d.getTime())) return ts;
     return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
-}
-
-// ─── Tag input ────────────────────────────────────────────────────────────────
-
-interface TagInputProps {
-    tags: string[];
-    onChange: (tags: string[]) => void;
-    placeholder?: string;
-    id?: string;
-}
-
-function TagInput({ tags, onChange, placeholder, id }: TagInputProps) {
-    const [input, setInput] = useState('');
-    const inputRef = useRef<HTMLInputElement>(null);
-
-    function addTag(raw: string) {
-        const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
-        const next = [...new Set([...tags, ...parts])];
-        if (next.length !== tags.length) onChange(next);
-        setInput('');
-    }
-
-    function removeTag(tag: string) {
-        onChange(tags.filter((t) => t !== tag));
-    }
-
-    return (
-        <div
-            id={id}
-            onClick={() => inputRef.current?.focus()}
-            className="flex flex-wrap gap-1.5 items-center min-h-[2.5rem] w-full rounded-lg border border-input bg-background px-3 py-1.5 text-sm cursor-text focus-within:ring-2 focus-within:ring-primary/50"
-        >
-            {tags.map((tag) => (
-                <span
-                    key={tag}
-                    className="flex items-center gap-1 rounded-md bg-primary/15 border border-primary/30 px-2 py-0.5 text-xs font-mono text-primary"
-                >
-                    {tag}
-                    <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); removeTag(tag); }}
-                        className="hover:text-destructive transition-colors"
-                        aria-label={`Remove ${tag}`}
-                    >
-                        <XIcon className="size-3" />
-                    </button>
-                </span>
-            ))}
-            <input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                    if ((e.key === 'Enter' || e.key === ',') && input.trim()) {
-                        e.preventDefault();
-                        addTag(input);
-                    } else if (e.key === 'Backspace' && !input && tags.length > 0) {
-                        onChange(tags.slice(0, -1));
-                    }
-                }}
-                onBlur={() => { if (input.trim()) addTag(input); }}
-                placeholder={tags.length === 0 ? placeholder : ''}
-                className="flex-1 min-w-[140px] bg-transparent outline-none text-sm placeholder:text-muted-foreground"
-            />
-        </div>
-    );
 }
 
 // ─── Row renderer ─────────────────────────────────────────────────────────────
@@ -196,8 +132,15 @@ TimelineRow.displayName = 'TimelineRow';
 // ─── UserPage ─────────────────────────────────────────────────────────────────
 
 export function UserPage() {
-    const [userIds, setUserIds] = useState<string[]>([]);
-    const [displayNames, setDisplayNames] = useState<string[]>([]);
+    const {
+        selected,
+        updateSelection,
+        commitSelectionToUrl,
+        isHydrating,
+        hydrationError,
+        hadDeepLink
+    } = useSelectedPlayersParam();
+
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rows, setRows] = useState<UserTimelineRow[] | null>(null);
@@ -208,19 +151,10 @@ export function UserPage() {
     const [sourceFilter, setSourceFilter] = useState<Set<string>>(new Set());
     const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
-    // Load from URL params on mount
-    useEffect(() => {
-        const sp = new URLSearchParams(window.location.search);
-        const ids = sp.get('ids')?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
-        const names = sp.get('names')?.split(',').map(s => s.trim()).filter(Boolean) ?? [];
-        if (ids.length > 0) setUserIds(ids);
-        if (names.length > 0) setDisplayNames(names);
-    }, []);
-
     const abortRef = useRef<AbortController | null>(null);
 
-    const handleSearch = useCallback(async () => {
-        if (userIds.length === 0 && displayNames.length === 0) return;
+    const handleSearch = useCallback(async (playersToSearch: Player[] = selected) => {
+        if (playersToSearch.length === 0) return;
         abortRef.current?.abort();
         const ctrl = new AbortController();
         abortRef.current = ctrl;
@@ -231,14 +165,13 @@ export function UserPage() {
         setExpandedIdx(null);
         setSourceFilter(new Set());
 
-        // Update URL for deep linking
-        const sp = new URLSearchParams();
-        if (userIds.length > 0) sp.set('ids', userIds.join(','));
-        if (displayNames.length > 0) sp.set('names', displayNames.join(','));
-        window.history.replaceState({}, '', `?${sp.toString()}`);
+        const ids = playersToSearch.map((p) => p.id);
+        const names = playersToSearch.map((p) => p.displayName);
+
+        commitSelectionToUrl(playersToSearch);
 
         try {
-            const data = await fetchUserTimeline(userIds, displayNames, ctrl.signal);
+            const data = await fetchUserTimeline(ids, names, ctrl.signal);
             setRows(data.rows);
             setTotal(data.total);
         } catch (err: unknown) {
@@ -248,7 +181,26 @@ export function UserPage() {
         } finally {
             setLoading(false);
         }
-    }, [userIds, displayNames]);
+    }, [selected, commitSelectionToUrl]);
+
+    // Auto-trigger search when hydrating deep link
+    const autoSearched = useRef(false);
+    useEffect(() => {
+        if (hadDeepLink && selected.length > 0 && !autoSearched.current && !isHydrating) {
+            autoSearched.current = true;
+            handleSearch(selected);
+        }
+    }, [hadDeepLink, selected, isHydrating, handleSearch]);
+
+    function addPlayer(player: Player) {
+        if (!selected.some((p) => p.id === player.id)) {
+            updateSelection([...selected, player]);
+        }
+    }
+
+    function removePlayer(id: string) {
+        updateSelection(selected.filter((p) => p.id !== id));
+    }
 
     // All unique sources in current results for filter checkboxes
     const allSources = useMemo(() => {
@@ -291,7 +243,7 @@ export function UserPage() {
             if (expandedIdx === index) {
                 const raw = filteredRows[index]?.raw;
                 const lines = raw ? JSON.stringify(raw, null, 2).split('\n').length : 5;
-                return 40 + 24 + Math.min(lines, 30) * 16 + 24; // header + pre padding + lines + bottom
+                return 40 + 24 + Math.min(lines, 30) * 16 + 24;
             }
             return 40;
         },
@@ -308,17 +260,15 @@ export function UserPage() {
             const headers = ['created_at', 'source', 'type', 'user_id', 'display_name', 'detail'];
             const lines = [
                 headers.join(','),
-                    ...filteredRows.map((r) =>
-                        headers.map((h) => JSON.stringify(String((r as unknown as Record<string, unknown>)[h] ?? ''))).join(',')
-                    )
+                ...filteredRows.map((r) =>
+                    headers.map((h) => JSON.stringify(String((r as unknown as Record<string, unknown>)[h] ?? ''))).join(',')
+                )
             ];
             const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = 'user_timeline.csv'; a.click();
         }
     }
-
-    const canSearch = userIds.length > 0 || displayNames.length > 0;
 
     return (
         <div className="flex h-full flex-col gap-4 p-6">
@@ -330,7 +280,7 @@ export function UserPage() {
                         User Timeline
                     </h1>
                     <p className="text-sm text-muted-foreground mt-0.5">
-                        Look up one or more users to see every database entry involving them — join/leave events, feed, notifications, and more.
+                        Look up one or more players to view every database entry involving them — join/leave events, feed updates, notifications, and notes.
                     </p>
                 </div>
                 {rows && (
@@ -351,55 +301,44 @@ export function UserPage() {
                 )}
             </header>
 
-            {/* Search inputs */}
+            {/* Unified Player Picker */}
             <div className="rounded-xl border bg-card p-4 shadow-xs flex flex-col gap-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide" htmlFor="user-ids-input">
-                            User IDs <span className="font-normal normal-case">(usr_xxx)</span>
-                        </label>
-                        <TagInput
-                            id="user-ids-input"
-                            tags={userIds}
-                            onChange={setUserIds}
-                            placeholder="Paste usr_… ids, press Enter or comma"
-                        />
-                    </div>
-                    <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide" htmlFor="display-names-input">
-                            Display Names
-                        </label>
-                        <TagInput
-                            id="display-names-input"
-                            tags={displayNames}
-                            onChange={setDisplayNames}
-                            placeholder="Type name, press Enter or comma"
-                        />
-                    </div>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs text-muted-foreground">
-                        Matches by exact user ID or partial display name across all 13 VRCX tables.
-                    </p>
-                    <button
+                <div className="flex items-center gap-3">
+                    <PlayerPicker
+                        selected={selected}
+                        onAdd={addPlayer}
+                        onRemove={removePlayer}
+                        isBusy={isHydrating}
+                    />
+                    <Button
                         id="user-timeline-search-btn"
-                        onClick={handleSearch}
-                        disabled={!canSearch || loading}
-                        className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-sm"
+                        onClick={() => handleSearch(selected)}
+                        disabled={selected.length === 0 || loading || isHydrating}
+                        className="shrink-0"
                     >
-                        {loading
-                            ? <RefreshCwIcon className="size-4 animate-spin" />
-                            : <SearchIcon className="size-4" />}
-                        {loading ? 'Searching…' : 'Search'}
-                    </button>
+                        {loading ? (
+                            <>
+                                <RefreshCwIcon className="size-4 animate-spin mr-1.5" />
+                                Searching…
+                            </>
+                        ) : (
+                            <>
+                                <SearchIcon className="size-4 mr-1.5" />
+                                Search Timeline
+                            </>
+                        )}
+                    </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                    Search by player name or user ID. Selection is saved to the URL parameter for easy sharing.
+                </p>
             </div>
 
-            {/* Error */}
-            {error && (
+            {/* Hydration or Fetch Error */}
+            {(error || hydrationError) && (
                 <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
                     <AlertCircleIcon className="size-5 shrink-0" />
-                    <span>{error}</span>
+                    <span>{error || hydrationError}</span>
                 </div>
             )}
 
@@ -474,12 +413,12 @@ export function UserPage() {
 
                         {filteredRows.length === 0 ? (
                             <div className="flex flex-1 items-center justify-center text-muted-foreground text-sm py-16">
-                                {rows.length === 0 ? 'No entries found for the given users.' : 'No entries match the current filters.'}
+                                {rows.length === 0 ? 'No entries found for the selected player(s).' : 'No entries match the current filters.'}
                             </div>
                         ) : (
                             <div className="flex-1 min-h-0">
                                 {React.createElement(List as any, {
-                                    height: Math.max(300, window.innerHeight - 420),
+                                    height: Math.max(300, window.innerHeight - 380),
                                     itemCount: filteredRows.length,
                                     itemSize: getItemSize,
                                     width: '100%',
@@ -496,7 +435,7 @@ export function UserPage() {
             {rows === null && !loading && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
                     <UserIcon className="size-12 opacity-20" />
-                    <p className="text-sm">Enter one or more user IDs or display names above and click Search.</p>
+                    <p className="text-sm">Select one or more players using the search bar above and click Search Timeline.</p>
                 </div>
             )}
         </div>
