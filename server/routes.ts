@@ -503,7 +503,29 @@ router.get('/user/timeline', (req, res) => {
     }
 });
 
-// ─── Upload Proxy (HTML Report Sharing with Fallbacks) ─────────────────────────
+// ─── Local Report Store & Upload Proxy (HTML Report Sharing) ───────────────────
+
+const localReportStore = new Map<string, { content: string; createdAt: number }>();
+
+// Clean up local reports older than 24 hours
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, item] of localReportStore.entries()) {
+        if (now - item.createdAt > 24 * 60 * 60 * 1000) {
+            localReportStore.delete(id);
+        }
+    }
+}, 60 * 60 * 1000);
+
+router.get('/reports/:id', (req, res) => {
+    const report = localReportStore.get(req.params.id);
+    if (!report) {
+        res.status(404).send('Report expired or not found.');
+        return;
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(report.content);
+});
 
 async function uploadToDpaste(content: string): Promise<string> {
     const params = new URLSearchParams({
@@ -558,7 +580,15 @@ router.post('/upload', async (req, res) => {
             return;
         }
 
-        console.log(`[API] POST /api/upload — requested filename: ${filename}, provider: ${provider}`);
+        // Always store locally first for instant, 100% full-screen rendering
+        const reportId = Math.random().toString(36).substring(2, 10);
+        localReportStore.set(reportId, { content, createdAt: Date.now() });
+
+        const host = req.get('host') || '127.0.0.1:8990';
+        const protocol = req.protocol || 'http';
+        const localUrl = `${protocol}://${host}/api/reports/${reportId}`;
+
+        console.log(`[API] POST /api/upload — filename: ${filename}, stored locally at: ${localUrl}`);
 
         // Ordered upload providers to attempt
         const providers: Array<{ name: string; fn: () => Promise<string> }> = [];
@@ -578,7 +608,7 @@ router.post('/upload', async (req, res) => {
                 console.log(`[API] Uploading via ${p.name}…`);
                 const url = await p.fn();
                 console.log(`[API] Upload successful via ${p.name}: ${url}`);
-                res.json({ success: true, url, provider: p.name });
+                res.json({ success: true, url, localUrl, provider: p.name });
                 return;
             } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : String(err);
@@ -587,13 +617,13 @@ router.post('/upload', async (req, res) => {
             }
         }
 
-        res.status(502).json({
-            error: `All upload providers failed: ${errors.join('; ')}`
-        });
+        // If all remote services fail, return local server URL as guaranteed working fallback
+        res.json({ success: true, url: localUrl, localUrl, provider: 'local', warning: 'Remote upload failed; serving via local server.' });
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/upload:', err);
         res.status(500).json({ error: toErrorMessage(err, 'Failed to upload report file') });
     }
 });
+
 
 

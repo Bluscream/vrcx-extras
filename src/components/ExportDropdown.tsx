@@ -43,16 +43,16 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
         setIsOpen(false);
     };
 
-    const handleUploadHtml = async (provider: 'dpaste' | 'catbox' = 'dpaste') => {
+    const handleUploadHtml = async (provider: 'auto' | 'dpaste' | 'catbox' = 'auto') => {
         try {
             setUploading(true);
             setUploadError(null);
             setUploadedUrl(null);
             const html = generateHtmlReport(title, data);
-            const url = await uploadHtmlReport(html, `${filenamePrefix}.html`, provider);
-            setUploadedUrl(url);
+            const res = await uploadHtmlReport(html, `${filenamePrefix}.html`, provider);
+            setUploadedUrl(res.url);
             // Automatically copy URL to clipboard
-            await copy(url, 'uploaded-url');
+            await copy(res.url, 'uploaded-url');
         } catch (err: unknown) {
             setUploadError(err instanceof Error ? err.message : 'Upload failed');
         } finally {

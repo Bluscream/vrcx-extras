@@ -255,8 +255,8 @@ function escapeHtml(str: string): string {
 export async function uploadHtmlReport(
     htmlContent: string,
     filename: string,
-    provider: 'dpaste' | 'catbox' = 'dpaste'
-): Promise<string> {
+    provider: 'auto' | 'dpaste' | 'catbox' = 'auto'
+): Promise<{ url: string; localUrl?: string; provider: string }> {
     const res = await fetch('/api/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -268,6 +268,5 @@ export async function uploadHtmlReport(
         throw new Error((err as { error?: string }).error || `Upload failed with status ${res.status}`);
     }
 
-    const data = await res.json();
-    return data.url;
+    return await res.json();
 }
