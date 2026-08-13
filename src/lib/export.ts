@@ -42,108 +42,203 @@ export function exportToCsv(data: Record<string, unknown>[], filename = 'export.
 
 /**
  * Generates a self-contained, interactive single-file HTML document.
- * Anyone opening the HTML file in a browser gets a dark-themed, filterable report
- * with row expansion and JSON inspection.
+ *
+ * Styling mirrors the app shell: the same VRCX-0 design tokens (oklch neutrals,
+ * radius scale, Geist type stack) copied verbatim from `src/styles/globals.css`,
+ * so a shared report reads as the same product. Light and dark both ship; the
+ * report follows the reader's OS preference and offers a manual toggle, since a
+ * shared link has no access to the app's stored theme.
  */
 export function generateHtmlReport(title: string, data: Record<string, unknown>[]): string {
     const jsonString = JSON.stringify(data).replace(/</g, '\\u003c');
-    
+
     return `<!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(title)}</title>
     <style>
+        /* ── VRCX-0 design tokens (kept name-for-name with the app) ────────── */
         :root {
-            --bg: #090d16;
-            --card: #111827;
-            --muted: #1f2937;
-            --border: #374151;
-            --text: #f3f4f6;
-            --subtext: #9ca3af;
-            --primary: #6366f1;
-            --primary-bg: rgba(99, 102, 241, 0.15);
+            --background: oklch(1 0 0);
+            --foreground: oklch(0.145 0 0);
+            --card: oklch(1 0 0);
+            --popover: oklch(1 0 0);
+            --primary: oklch(0.205 0 0);
+            --primary-foreground: oklch(0.985 0 0);
+            --secondary: oklch(0.97 0 0);
+            --muted: oklch(0.97 0 0);
+            --muted-foreground: oklch(0.556 0 0);
+            --accent: oklch(0.97 0 0);
+            --border: oklch(0.922 0 0);
+            --ring: oklch(0.708 0 0);
+            --radius: 0.625rem;
+            --table-surface: color-mix(in oklch, var(--background) 99%, var(--foreground));
+            --table-header-surface: color-mix(in oklch, var(--background) 94%, var(--foreground));
+            --main-surface: color-mix(in oklch, var(--background) 98%, var(--foreground));
+            --row-hover: color-mix(in oklch, var(--background) 96%, var(--foreground));
         }
+
+        :root[data-theme='dark'] {
+            --background: oklch(0.145 0 0);
+            --foreground: oklch(0.985 0 0);
+            --card: oklch(0.205 0 0);
+            --popover: oklch(0.205 0 0);
+            --primary: oklch(0.922 0 0);
+            --primary-foreground: oklch(0.205 0 0);
+            --secondary: oklch(0.269 0 0);
+            --muted: oklch(0.269 0 0);
+            --muted-foreground: oklch(0.708 0 0);
+            --accent: oklch(0.269 0 0);
+            --border: oklch(1 0 0 / 10%);
+            --ring: oklch(0.556 0 0);
+        }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
+            font-family: 'Geist Variable', system-ui, -apple-system, sans-serif;
+            background: var(--main-surface);
+            color: var(--foreground);
             padding: 1.5rem;
             line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
         }
+
         .header {
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
+            gap: 1rem;
             margin-bottom: 1.5rem;
             padding-bottom: 1rem;
             border-bottom: 1px solid var(--border);
         }
-        .title { font-size: 1.5rem; font-weight: 700; color: #fff; }
-        .subtitle { font-size: 0.875rem; color: var(--subtext); margin-top: 0.25rem; }
+        .title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: var(--foreground);
+        }
+        .subtitle {
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            margin-top: 0.125rem;
+        }
+
+        .theme-toggle {
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.375rem;
+            height: 2rem;
+            padding: 0 0.625rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--secondary);
+            color: var(--foreground);
+            font: inherit;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+        .theme-toggle:hover { background: var(--accent); }
+        .theme-toggle:focus-visible { outline: 3px solid var(--ring); outline-offset: 1px; }
+
         .controls {
             display: flex;
             gap: 0.75rem;
             margin-bottom: 1rem;
             align-items: center;
+            flex-wrap: wrap;
         }
         .search-input {
             flex: 1;
-            max-width: 360px;
-            background: var(--card);
+            min-width: 12rem;
+            max-width: 22rem;
+            height: 2rem;
+            background: var(--background);
             border: 1px solid var(--border);
-            color: var(--text);
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.5rem;
+            color: var(--foreground);
+            padding: 0 0.625rem;
+            border-radius: var(--radius);
+            font: inherit;
             font-size: 0.875rem;
             outline: none;
+            transition: box-shadow 0.15s, border-color 0.15s;
         }
-        .search-input:focus { border-color: var(--primary); }
+        .search-input::placeholder { color: var(--muted-foreground); }
+        .search-input:focus {
+            border-color: var(--ring);
+            box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 50%, transparent);
+        }
+
         .badge {
             display: inline-block;
             padding: 0.15rem 0.5rem;
-            border-radius: 0.25rem;
+            border-radius: calc(var(--radius) - 4px);
             font-size: 0.7rem;
             font-weight: 600;
             text-transform: uppercase;
-            background: var(--primary-bg);
-            color: var(--primary);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-        }
-        .count-text { font-size: 0.875rem; color: var(--subtext); }
-        .table-container {
-            background: var(--card);
+            letter-spacing: 0.03em;
+            background: var(--accent);
+            color: var(--foreground);
             border: 1px solid var(--border);
-            border-radius: 0.75rem;
+        }
+
+        .count-text { font-size: 0.875rem; color: var(--muted-foreground); }
+
+        .table-container {
+            background: var(--table-surface);
+            border: 1px solid var(--border);
+            border-radius: calc(var(--radius) + 4px);
             overflow: hidden;
         }
         table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.825rem; }
         th {
-            background: var(--muted);
-            color: var(--subtext);
+            background: var(--table-header-surface);
+            color: var(--muted-foreground);
             font-weight: 600;
             padding: 0.65rem 0.75rem;
             border-bottom: 1px solid var(--border);
             font-size: 0.75rem;
             text-transform: uppercase;
+            letter-spacing: 0.03em;
         }
-        td { padding: 0.65rem 0.75rem; border-bottom: 1px solid rgba(55, 65, 81, 0.5); }
-        tr.data-row { cursor: pointer; transition: background 0.15s; }
-        tr.data-row:hover { background: rgba(255, 255, 255, 0.04); }
-        .font-mono { font-family: ui-monospace, SFMono-Regular, monospace; }
+        td {
+            padding: 0.65rem 0.75rem;
+            border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+        }
+        tr.data-row { cursor: pointer; transition: background-color 0.15s; }
+        tr.data-row:hover { background: var(--row-hover); }
+
+        .font-mono { font-family: ui-monospace, SFMono-Regular, 'Geist Mono Variable', monospace; }
+
         .raw-container {
-            background: #000;
+            background: var(--muted);
+            border: 1px solid var(--border);
             padding: 0.75rem;
-            border-radius: 0.5rem;
-            font-family: monospace;
+            border-radius: var(--radius);
+            font-family: ui-monospace, SFMono-Regular, monospace;
             font-size: 0.75rem;
-            color: #10b981;
+            color: var(--muted-foreground);
             white-space: pre-wrap;
             word-break: break-all;
             display: none;
             margin: 0.5rem 0;
+        }
+
+        /* Same thin scrollbars as the app shell. */
+        * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+        *::-webkit-scrollbar { width: 0.625rem; height: 0.625rem; }
+        *::-webkit-scrollbar-track { background: transparent; }
+        *::-webkit-scrollbar-thumb {
+            border: 1px solid transparent;
+            border-radius: 9999px;
+            background-color: var(--border);
+            background-clip: content-box;
         }
     </style>
 </head>
@@ -151,12 +246,15 @@ export function generateHtmlReport(title: string, data: Record<string, unknown>[
     <div class="header">
         <div>
             <div class="title">${escapeHtml(title)}</div>
-            <div class="subtitle">Generated report • ${new Date().toLocaleString()}</div>
+            <div class="subtitle">VRCX-Extras report • ${new Date().toLocaleString()}</div>
         </div>
+        <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle colour theme">
+            <span id="theme-toggle-label">Dark</span>
+        </button>
     </div>
-    
+
     <div class="controls">
-        <input type="text" id="search" class="search-input" placeholder="Search report rows...">
+        <input type="text" id="search" class="search-input" placeholder="Search report rows…">
         <div id="count" class="count-text">Showing 0 rows</div>
     </div>
 
@@ -171,6 +269,29 @@ export function generateHtmlReport(title: string, data: Record<string, unknown>[
     // Wrapped in an IIFE: htmlpreview.github.io re-injects inline scripts when it
     // renders the page, so top-level declarations must not leak into globals.
     (function () {
+        // Theme: follow the reader's OS preference, remember an explicit choice.
+        const root = document.documentElement;
+        const toggle = document.getElementById('theme-toggle');
+        const toggleLabel = document.getElementById('theme-toggle-label');
+
+        function applyTheme(theme) {
+            root.dataset.theme = theme;
+            root.style.colorScheme = theme;
+            toggleLabel.textContent = theme === 'dark' ? 'Light' : 'Dark';
+        }
+
+        let stored = null;
+        try { stored = localStorage.getItem('vrcx-extras-report-theme'); } catch (err) { /* restricted context */ }
+        applyTheme(stored === 'light' || stored === 'dark'
+            ? stored
+            : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+
+        toggle.addEventListener('click', () => {
+            const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+            applyTheme(next);
+            try { localStorage.setItem('vrcx-extras-report-theme', next); } catch (err) { /* restricted context */ }
+        });
+
         const data = ${jsonString};
         const searchInput = document.getElementById('search');
         const tableHead = document.getElementById('table-head');

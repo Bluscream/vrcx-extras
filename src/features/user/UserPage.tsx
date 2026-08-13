@@ -261,13 +261,11 @@ export function UserPage() {
                 title="User Timeline"
                 description="Look up one or more players to view every database entry involving them — join/leave events, feed updates, notifications, and notes."
                 actions={
-                    rows ? (
-                        <ExportDropdown
-                            title="User Timeline Report"
-                            filenamePrefix="user_timeline"
-                            data={filteredRows as unknown as Record<string, unknown>[]}
-                        />
-                    ) : null
+                    <ExportDropdown
+                        title="User Timeline Report"
+                        filenamePrefix="user_timeline"
+                        data={filteredRows as unknown as Record<string, unknown>[]}
+                    />
                 }
             />
 

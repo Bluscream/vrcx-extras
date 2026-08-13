@@ -134,13 +134,11 @@ export function LinkFinderPage() {
                 title="Instance Links"
                 description="Find every instance two or more players were recorded in together, straight from your read-only VRCX database."
                 actions={
-                    filteredResults && filteredResults.length > 0 ? (
-                        <ExportDropdown
-                            title="Shared Instances Report"
-                            filenamePrefix="instance_links"
-                            data={toExportRows(filteredResults)}
-                        />
-                    ) : null
+                    <ExportDropdown
+                        title="Shared Instances Report"
+                        filenamePrefix="instance_links"
+                        data={toExportRows(filteredResults ?? [])}
+                    />
                 }
             />
 

@@ -402,13 +402,11 @@ export function RegistryBackupPage() {
                 description="Double-click any key name or value to edit inline directly in the table. Hover rows for VRCOSC definitions."
                 actions={
                     <>
-                        {selectedBackup && combinedKeys.length > 0 && (
-                            <ExportDropdown
-                                title={`Registry — ${selectedBackup.name}`}
-                                filenamePrefix="vrchat_registry"
-                                data={exportRows}
-                            />
-                        )}
+                        <ExportDropdown
+                            title={selectedBackup ? `Registry — ${selectedBackup.name}` : 'Registry'}
+                            filenamePrefix="vrchat_registry"
+                            data={exportRows}
+                        />
                         <Button variant="secondary" onClick={loadBackups}>
                             <RefreshCwIcon className={loading ? 'animate-spin' : ''} />
                             Refresh

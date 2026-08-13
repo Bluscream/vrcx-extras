@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { exportToCsv, exportToJson, downloadFile, generateHtmlReport, uploadHtmlReport } from '@/lib/export';
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard';
+import { Button } from '@/ui/button';
 
 interface ExportDropdownProps {
     title: string;
@@ -22,6 +23,7 @@ interface ExportDropdownProps {
 
 export function ExportDropdown({ title, filenamePrefix, data, disabled }: ExportDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
+    // Hooks must run before the empty-data bail-out below.
     const [uploading, setUploading] = useState(false);
     const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
     const [uploadNotice, setUploadNotice] = useState<string | null>(null);
@@ -63,17 +65,18 @@ export function ExportDropdown({ title, filenamePrefix, data, disabled }: Export
         }
     };
 
+    // Nothing to export means no control at all — every page behaves the same
+    // way, so callers can render <ExportDropdown> unconditionally.
+    if (data.length === 0) {
+        return null;
+    }
+
     return (
         <div className="relative inline-block text-left">
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                disabled={disabled || data.length === 0}
-                className="flex items-center gap-1.5 rounded-lg border bg-secondary px-3.5 py-1.5 text-xs font-semibold text-secondary-foreground hover:bg-secondary/80 disabled:opacity-50 transition-colors shadow-xs"
-            >
-                <DownloadIcon className="size-3.5" />
+            <Button variant="secondary" size="sm" onClick={() => setIsOpen(!isOpen)} disabled={disabled}>
+                <DownloadIcon />
                 Export / Share
-            </button>
+            </Button>
 
             {isOpen && (
                 <>

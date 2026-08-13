@@ -118,13 +118,11 @@ export function PlayerSearchPage() {
                 title={entityDetails ? 'Entity Details' : 'Universal Search'}
                 description="Search players, worlds, avatars and instances recorded in your VRCX database."
                 actions={
-                    searchResults ? (
-                        <ExportDropdown
-                            title={`Search Results — ${searchQuery}`}
-                            filenamePrefix="search_results"
-                            data={toExportRows(searchResults)}
-                        />
-                    ) : null
+                    <ExportDropdown
+                        title={`Search Results — ${searchQuery}`}
+                        filenamePrefix="search_results"
+                        data={searchResults ? toExportRows(searchResults) : []}
+                    />
                 }
             />
 
