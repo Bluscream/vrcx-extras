@@ -503,62 +503,97 @@ router.get('/user/timeline', (req, res) => {
     }
 });
 
-// ─── Upload Proxy (HTML Report Sharing) ────────────────────────────────────────
+// ─── Upload Proxy (HTML Report Sharing with Fallbacks) ─────────────────────────
+
+async function uploadToDpaste(content: string): Promise<string> {
+    const params = new URLSearchParams({
+        content,
+        format: 'url',
+        expiry_days: '30'
+    });
+
+    const res = await fetch('https://dpaste.com/api/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+        signal: AbortSignal.timeout(10000)
+    });
+
+    if (!res.ok) {
+        throw new Error(`dpaste returned HTTP ${res.status}`);
+    }
+
+    const rawUrl = (await res.text()).trim();
+    return rawUrl.endsWith('.raw') ? rawUrl : `${rawUrl}.raw`;
+}
+
+async function uploadToCatbox(content: string, filename: string): Promise<string> {
+    const formData = new FormData();
+    formData.append('reqtype', 'fileupload');
+    const blob = new Blob([content], { type: 'text/html' });
+    formData.append('fileToUpload', blob, filename.endsWith('.html') ? filename : `${filename}.html`);
+
+    const res = await fetch('https://catbox.moe/user/api.php', {
+        method: 'POST',
+        body: formData,
+        signal: AbortSignal.timeout(10000)
+    });
+
+    if (!res.ok) {
+        throw new Error(`Catbox returned HTTP ${res.status}`);
+    }
+
+    const url = (await res.text()).trim();
+    if (!url.startsWith('http')) {
+        throw new Error(`Catbox error response: ${url}`);
+    }
+    return url;
+}
 
 router.post('/upload', async (req, res) => {
     try {
-        const { content, filename = 'report.html', provider = 'catbox' } = req.body || {};
+        const { content, filename = 'report.html', provider = 'auto' } = req.body || {};
         if (typeof content !== 'string' || !content.trim()) {
             res.status(400).json({ error: 'Field "content" (HTML string) is required' });
             return;
         }
 
-        console.log(`[API] POST /api/upload — uploading ${filename} via ${provider}`);
+        console.log(`[API] POST /api/upload — requested filename: ${filename}, provider: ${provider}`);
 
-        if (provider === 'dpaste') {
-            const params = new URLSearchParams({
-                content,
-                format: 'url',
-                expiry_days: '30'
-            });
+        // Ordered upload providers to attempt
+        const providers: Array<{ name: string; fn: () => Promise<string> }> = [];
 
-            const dpasteRes = await fetch('https://dpaste.com/api/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: params.toString()
-            });
-
-            if (!dpasteRes.ok) {
-                throw new Error(`dpaste error: ${dpasteRes.statusText}`);
-            }
-
-            const rawUrl = (await dpasteRes.text()).trim();
-            // Append .raw so browsers render the raw HTML document directly
-            const url = rawUrl.endsWith('.raw') ? rawUrl : `${rawUrl}.raw`;
-            res.json({ success: true, url, provider: 'dpaste' });
-        } else if (provider === 'catbox') {
-            const formData = new FormData();
-            formData.append('reqtype', 'fileupload');
-            const blob = new Blob([content], { type: 'text/html' });
-            formData.append('fileToUpload', blob, filename.endsWith('.html') ? filename : `${filename}.html`);
-
-            const catboxRes = await fetch('https://catbox.moe/user/api.php', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!catboxRes.ok) {
-                throw new Error(`Catbox error: ${catboxRes.statusText}`);
-            }
-
-            const url = (await catboxRes.text()).trim();
-            res.json({ success: true, url, provider: 'catbox' });
+        if (provider === 'catbox') {
+            providers.push({ name: 'catbox', fn: () => uploadToCatbox(content, filename) });
+            providers.push({ name: 'dpaste', fn: () => uploadToDpaste(content) });
         } else {
-            res.status(400).json({ error: `Unsupported provider: ${provider}` });
+            // Default ('auto' or 'dpaste'): prefer dpaste for raw HTML script execution, fallback to Catbox
+            providers.push({ name: 'dpaste', fn: () => uploadToDpaste(content) });
+            providers.push({ name: 'catbox', fn: () => uploadToCatbox(content, filename) });
         }
+
+        const errors: string[] = [];
+        for (const p of providers) {
+            try {
+                console.log(`[API] Uploading via ${p.name}…`);
+                const url = await p.fn();
+                console.log(`[API] Upload successful via ${p.name}: ${url}`);
+                res.json({ success: true, url, provider: p.name });
+                return;
+            } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.warn(`[API] Upload via ${p.name} failed: ${msg}. Trying fallback…`);
+                errors.push(`${p.name}: ${msg}`);
+            }
+        }
+
+        res.status(502).json({
+            error: `All upload providers failed: ${errors.join('; ')}`
+        });
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/upload:', err);
         res.status(500).json({ error: toErrorMessage(err, 'Failed to upload report file') });
     }
 });
+
 
