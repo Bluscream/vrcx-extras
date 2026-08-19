@@ -273,3 +273,55 @@ export function saveLaunchOptions(newLaunchOptions: string): { success: boolean;
     fs.writeFileSync(filePath, content, 'utf-8');
     return { success: true, message: 'Updated VRChat LaunchOptions in localconfig.vdf successfully.', filePath };
 }
+
+export async function launchTemporaryTestInstance(
+    tool: string,
+    env: string,
+    args: string,
+    worldId: string = 'wrld_a2fd9533-5c69-400b-a34e-ae0c11df99e1'
+): Promise<{ success: boolean; message: string; originalToolRestored: string; originalOptionsRestored: string }> {
+    // 1. RAM BACKUP PHASE: Read and back up current Steam settings to memory
+    const originalTool = readCompatTool();
+    const originalOptionsRes = readLaunchOptions();
+    const originalOptions = originalOptionsRes.rawLaunchOptions || '';
+
+    console.log('[launcher] RAM Backup created:');
+    console.log('  Original Tool   :', originalTool);
+    console.log('  Original Options:', originalOptions);
+
+    // 2. APPLY TEST CONFIGURATION
+    if (tool) {
+        saveCompatTool(tool);
+    }
+    const testLaunchOptions = `${env} %command% --desktop --watch-world=${worldId} ${args}`.trim();
+    saveLaunchOptions(testLaunchOptions);
+
+    // 3. TRIGGER VRCHAT LAUNCH
+    try {
+        await execFileAsync('pkill', ['-f', 'reaper SteamLaunch AppId=438100']);
+    } catch {}
+
+    try {
+        await execFileAsync('bazzite-steam', ['-applaunch', '438100', '--desktop', `--watch-world=${worldId}`]);
+    } catch {
+        await execFileAsync('steam', [`steam://rungameid/438100//vrchat://launch?id=${worldId}`]);
+    }
+
+    // 4. DELAY & RESTORE FROM RAM: Wait 3s for game process initialization then restore permanent config
+    setTimeout(() => {
+        try {
+            saveCompatTool(originalTool);
+            saveLaunchOptions(originalOptions);
+            console.log('[launcher] RAM Restore complete: Permanent Steam settings restored.');
+        } catch (restoreErr) {
+            console.error('[launcher] Error restoring Steam config from RAM:', restoreErr);
+        }
+    }, 3000);
+
+    return {
+        success: true,
+        message: 'VRChat launched with test config. Permanent Steam settings backed up to RAM and restored.',
+        originalToolRestored: originalTool,
+        originalOptionsRestored: originalOptions
+    };
+}

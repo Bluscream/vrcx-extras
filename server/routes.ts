@@ -28,7 +28,7 @@ import {
     updateProtonRegistryKey
 } from './registry.ts';
 import { readVRChatConfig, saveVRChatConfig } from './config.ts';
-import { readLaunchOptions, saveLaunchOptions, isSteamRunning, stopSteam, startSteam, saveCompatTool, readCompatTool } from './launcher.ts';
+import { readLaunchOptions, saveLaunchOptions, isSteamRunning, stopSteam, startSteam, saveCompatTool, launchTemporaryTestInstance } from './launcher.ts';
 import { getUserTimeline } from './user.ts';
 
 import {
@@ -653,51 +653,8 @@ router.post('/env-testing/run-single-test', async (req, res) => {
 router.post('/env-testing/launch-test-window', async (req, res) => {
     try {
         const { tool = '', env = '', args = '', worldId = 'wrld_a2fd9533-5c69-400b-a34e-ae0c11df99e1' } = req.body || {};
-
-        // 1. RAM BACKUP PHASE: Read and back up current Steam settings to memory
-        const originalTool = readCompatTool();
-        const originalOptionsRes = readLaunchOptions();
-        const originalOptions = originalOptionsRes.rawLaunchOptions || '';
-
-        console.log('[Environment Testing] RAM Backup created:');
-        console.log('  Original Tool   :', originalTool);
-        console.log('  Original Options:', originalOptions);
-
-        // 2. APPLY TEST CONFIGURATION
-        if (tool) {
-            saveCompatTool(tool);
-        }
-        const testLaunchOptions = `${env} %command% --desktop --watch-world=${worldId} ${args}`.trim();
-        saveLaunchOptions(testLaunchOptions);
-
-        // 3. TRIGGER VRCHAT LAUNCH
-        try {
-            await execFileAsync('pkill', ['-f', 'reaper SteamLaunch AppId=438100']);
-        } catch {}
-
-        try {
-            await execFileAsync('bazzite-steam', ['-applaunch', '438100', '--desktop', `--watch-world=${worldId}`]);
-        } catch {
-            await execFileAsync('steam', [`steam://rungameid/438100//vrchat://launch?id=${worldId}`]);
-        }
-
-        // 4. DELAY & RESTORE FROM RAM: Wait 3s for game process initialization then restore permanent config
-        setTimeout(() => {
-            try {
-                saveCompatTool(originalTool);
-                saveLaunchOptions(originalOptions);
-                console.log('[Environment Testing] RAM Restore complete: Permanent Steam settings restored.');
-            } catch (restoreErr) {
-                console.error('[Environment Testing] Error restoring Steam config from RAM:', restoreErr);
-            }
-        }, 3000);
-
-        res.json({
-            success: true,
-            message: 'VRChat launched with test config. Permanent Steam settings backed up to RAM and restored.',
-            originalToolRestored: originalTool,
-            originalOptionsRestored: originalOptions
-        });
+        const result = await launchTemporaryTestInstance(tool, env, args, worldId);
+        res.json(result);
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/env-testing/launch-test-window:', err);
         res.status(500).json({ error: toErrorMessage(err, 'Failed to spawn VRChat test window') });
