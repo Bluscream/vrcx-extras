@@ -57,6 +57,10 @@ export function EnvTestingPage() {
             setCompatTools(data.availableCompatTools || []);
             setSteamRunning(Boolean(data.steamRunning));
 
+            if (data.rawLaunchOptions) {
+                setCmdString(data.rawLaunchOptions);
+            }
+
             if (data.compatTool) {
                 setSelectedTool(data.compatTool);
             } else if (data.availableCompatTools && data.availableCompatTools.length > 0) {
