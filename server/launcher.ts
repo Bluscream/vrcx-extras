@@ -306,8 +306,9 @@ export async function launchTemporaryTestInstance(
     if (!testLaunchOptions.includes('%command%')) {
         testLaunchOptions = testLaunchOptions ? `${testLaunchOptions} %command%` : '%command%';
     }
-    if (!testLaunchOptions.includes('--watch-world=')) {
-        testLaunchOptions = `${testLaunchOptions} --desktop --watch-world=${worldId}`;
+    const vrchatUri = worldId.startsWith('vrchat://') ? worldId : `vrchat://launch?id=${worldId}`;
+    if (!testLaunchOptions.includes('vrchat://') && !testLaunchOptions.includes('--watch-world=')) {
+        testLaunchOptions = `${testLaunchOptions} --desktop "${vrchatUri}"`;
     }
 
     saveLaunchOptions(testLaunchOptions);
@@ -324,9 +325,9 @@ export async function launchTemporaryTestInstance(
     } catch {}
 
     try {
-        await execFileAsync('bazzite-steam', ['-applaunch', '438100', '--desktop', `--watch-world=${worldId}`]);
+        await execFileAsync('steam', [`steam://rungameid/438100//${vrchatUri}`]);
     } catch {
-        await execFileAsync('steam', [`steam://rungameid/438100//vrchat://launch?id=${worldId}`]);
+        await execFileAsync('bazzite-steam', ['-applaunch', '438100', '--desktop', vrchatUri]);
     }
 
     // 4. DELAY & RESTORE FROM RAM: Wait 5s for game process initialization then restore permanent config
