@@ -325,9 +325,17 @@ export async function launchTemporaryTestInstance(
     } catch {}
 
     try {
-        await execFileAsync('steam', [`steam://rungameid/438100//${vrchatUri}`]);
+        const child = spawn('steam', [`steam://rungameid/438100//${vrchatUri}`], {
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
     } catch {
-        await execFileAsync('bazzite-steam', ['-applaunch', '438100', '--desktop', vrchatUri]);
+        const child = spawn('bazzite-steam', ['-applaunch', '438100', '--desktop', vrchatUri], {
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
     }
 
     // 4. DELAY & RESTORE FROM RAM: Wait 5s for game process initialization then restore permanent config

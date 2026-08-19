@@ -11,12 +11,15 @@ import {
     CheckCircle2Icon,
     ShieldCheckIcon,
     PowerIcon,
-    InfoIcon
+    InfoIcon,
+    SaveIcon
 } from 'lucide-react';
 
 import {
     fetchLaunchOptions,
     launchEnvTestWindowApi,
+    saveLaunchOptionsApi,
+    saveCompatToolApi,
     stopSteamApi,
     startSteamApi,
     toErrorMessage
@@ -36,6 +39,7 @@ export function EnvTestingPage() {
 
     const [loadingTools, setLoadingTools] = useState<boolean>(true);
     const [launching, setLaunching] = useState<boolean>(false);
+    const [savingPermanently, setSavingPermanently] = useState<boolean>(false);
     const [togglingSteam, setTogglingSteam] = useState<boolean>(false);
     const [launchResult, setLaunchResult] = useState<EnvTestingLaunchResponse | null>(null);
 
@@ -107,7 +111,43 @@ export function EnvTestingPage() {
             setBannerType('error');
         } finally {
             setLaunching(false);
-            // Refresh steam status
+            loadTools();
+        }
+    }
+
+    async function handleSavePermanently() {
+        setSavingPermanently(true);
+        setBannerMessage(null);
+        try {
+            const shouldRestart = steamRunning && restartSteam;
+            if (shouldRestart) {
+                await stopSteamApi();
+                await new Promise((r) => setTimeout(r, 2000));
+            }
+
+            const messages: string[] = [];
+
+            if (selectedTool) {
+                const toolRes = await saveCompatToolApi(selectedTool, false, false);
+                messages.push(toolRes.message);
+            }
+
+            if (cmdString) {
+                const cmdRes = await saveLaunchOptionsApi(cmdString, false, false);
+                messages.push(cmdRes.message);
+            }
+
+            if (shouldRestart) {
+                await startSteamApi();
+            }
+
+            setBannerMessage(messages.join(' ') || 'Settings saved permanently to Steam config files.');
+            setBannerType('success');
+        } catch (err: unknown) {
+            setBannerMessage(`Failed to save settings permanently: ${toErrorMessage(err)}`);
+            setBannerType('error');
+        } finally {
+            setSavingPermanently(false);
             loadTools();
         }
     }
@@ -151,7 +191,7 @@ export function EnvTestingPage() {
                     <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2">
                         <InfoIcon className="h-4 w-4 shrink-0 mt-0.5" />
                         <div>
-                            <span className="font-semibold">Steam is currently running.</span> Steam caches compatibility configuration in memory while active. When launching a test instance, Steam will automatically restart to apply the temporary configuration cleanly.
+                            <span className="font-semibold">Steam is currently running.</span> Steam caches compatibility configuration in memory while active. When launching a test instance or saving permanently, Steam will automatically restart to apply configuration cleanly.
                         </div>
                     </div>
                 )}
@@ -161,7 +201,7 @@ export function EnvTestingPage() {
                     <div className="mb-4 flex items-center justify-between">
                         <h2 className="text-lg font-semibold text-card-foreground flex items-center gap-2">
                             <WrenchIcon className="h-5 w-5 text-primary" />
-                            Temporary Environment Configuration
+                            Environment Configuration & Testing
                         </h2>
                         <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
                             <ShieldCheckIcon className="h-3.5 w-3.5" />
@@ -259,15 +299,24 @@ export function EnvTestingPage() {
                         </label>
                     </div>
 
-                    {/* Launch Action Button */}
-                    <div className="mt-6 flex flex-wrap gap-4 pt-4 border-t border-border">
+                    {/* Launch & Save Action Buttons */}
+                    <div className="mt-6 flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-border">
                         <Button
                             variant="default"
                             onClick={handleLaunchTestWindow}
-                            disabled={launching}
+                            disabled={launching || savingPermanently}
                         >
                             <PlayIcon className={`mr-2 h-4 w-4 ${launching ? 'animate-spin' : ''}`} />
                             {launching ? 'Spawning VRChat Test Window...' : 'Launch Temporary VRChat Instance'}
+                        </Button>
+
+                        <Button
+                            variant="outline"
+                            onClick={handleSavePermanently}
+                            disabled={savingPermanently || launching}
+                        >
+                            <SaveIcon className={`mr-2 h-4 w-4 ${savingPermanently ? 'animate-spin' : ''}`} />
+                            {savingPermanently ? 'Saving Permanently to Steam...' : 'Save Permanently to Steam'}
                         </Button>
                     </div>
                 </div>
