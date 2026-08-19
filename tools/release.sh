@@ -28,7 +28,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --lint)     DO_LINT=true ;;
         --build)    DO_BUILD=true ;;
-        --deploy)   DO_BUILD=true ;;   # backwards-compat alias
         --commit)   DO_COMMIT=true ;;
         --push)     DO_PUSH=true ;;
         --release)  DO_RELEASE=true; DO_BUILD=true; DO_PUSH=true; DO_COMMIT=true ;;

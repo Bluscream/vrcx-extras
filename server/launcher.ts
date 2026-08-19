@@ -276,9 +276,9 @@ export function saveLaunchOptions(newLaunchOptions: string): { success: boolean;
 
 export async function launchTemporaryTestInstance(
     tool: string,
-    env: string,
-    args: string,
-    worldId: string = 'wrld_a2fd9533-5c69-400b-a34e-ae0c11df99e1'
+    cmd: string,
+    worldId: string = 'wrld_a2fd9533-5c69-400b-a34e-ae0c11df99e1',
+    restartSteam: boolean = true
 ): Promise<{ success: boolean; message: string; originalToolRestored: string; originalOptionsRestored: string }> {
     // 1. RAM BACKUP PHASE: Read and back up current Steam settings to memory
     const originalTool = readCompatTool();
@@ -289,14 +289,36 @@ export async function launchTemporaryTestInstance(
     console.log('  Original Tool   :', originalTool);
     console.log('  Original Options:', originalOptions);
 
+    const wasSteamRunning = await isSteamRunning();
+    if (wasSteamRunning && restartSteam) {
+        console.log('[launcher] Steam is running. Shutting down Steam for temporary test configuration update...');
+        await stopSteam();
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
     // 2. APPLY TEST CONFIGURATION
     if (tool) {
         saveCompatTool(tool);
     }
-    const testLaunchOptions = `${env} %command% --desktop --watch-world=${worldId} ${args}`.trim();
+
+    // Construct full launch options command
+    let testLaunchOptions = (cmd || '').trim();
+    if (!testLaunchOptions.includes('%command%')) {
+        testLaunchOptions = testLaunchOptions ? `${testLaunchOptions} %command%` : '%command%';
+    }
+    if (!testLaunchOptions.includes('--watch-world=')) {
+        testLaunchOptions = `${testLaunchOptions} --desktop --watch-world=${worldId}`;
+    }
+
     saveLaunchOptions(testLaunchOptions);
 
-    // 3. TRIGGER VRCHAT LAUNCH
+    // 3. TRIGGER VRCHAT LAUNCH VIA STEAM
+    if (wasSteamRunning && restartSteam) {
+        console.log('[launcher] Relaunching Steam...');
+        await startSteam();
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+
     try {
         await execFileAsync('pkill', ['-f', 'reaper SteamLaunch AppId=438100']);
     } catch {}
@@ -307,7 +329,7 @@ export async function launchTemporaryTestInstance(
         await execFileAsync('steam', [`steam://rungameid/438100//vrchat://launch?id=${worldId}`]);
     }
 
-    // 4. DELAY & RESTORE FROM RAM: Wait 3s for game process initialization then restore permanent config
+    // 4. DELAY & RESTORE FROM RAM: Wait 5s for game process initialization then restore permanent config
     setTimeout(() => {
         try {
             saveCompatTool(originalTool);
@@ -316,11 +338,11 @@ export async function launchTemporaryTestInstance(
         } catch (restoreErr) {
             console.error('[launcher] Error restoring Steam config from RAM:', restoreErr);
         }
-    }, 3000);
+    }, 5000);
 
     return {
         success: true,
-        message: 'VRChat launched with test config. Permanent Steam settings backed up to RAM and restored.',
+        message: 'VRChat launched with temporary test config. Permanent Steam settings backed up to RAM and restored.',
         originalToolRestored: originalTool,
         originalOptionsRestored: originalOptions
     };

@@ -632,13 +632,16 @@ const execFileAsync = promisify(execFile);
 
 router.post('/env-testing/run-single-test', async (req, res) => {
     try {
-        const { tool = '', env = '', args = '', url = '' } = req.body || {};
+        const { tool = '', cmd = '', env = '', args = '', url = '' } = req.body || {};
         const vrcvtBin = '/run/media/system/Data/Projects/vrcvt/bin/vrcvt';
 
         const cliArgs = ['--single', '--json'];
         if (tool) cliArgs.push('--tool', tool);
-        if (env) cliArgs.push('--env', env);
-        if (args) cliArgs.push('--args', args);
+        if (cmd) cliArgs.push('--cmd', cmd);
+        else {
+            if (env) cliArgs.push('--env', env);
+            if (args) cliArgs.push('--args', args);
+        }
         if (url) cliArgs.push('--url', url);
 
         const { stdout } = await execFileAsync(vrcvtBin, cliArgs, { timeout: 20000 });
@@ -652,8 +655,9 @@ router.post('/env-testing/run-single-test', async (req, res) => {
 
 router.post('/env-testing/launch-test-window', async (req, res) => {
     try {
-        const { tool = '', env = '', args = '', worldId = 'wrld_a2fd9533-5c69-400b-a34e-ae0c11df99e1' } = req.body || {};
-        const result = await launchTemporaryTestInstance(tool, env, args, worldId);
+        const { tool = '', cmd = '', env = '', args = '', worldId = 'wrld_a2fd9533-5c69-400b-a34e-ae0c11df99e1', restartSteam = true } = req.body || {};
+        const fullCmd = cmd || `${env} %command% ${args}`.trim();
+        const result = await launchTemporaryTestInstance(tool, fullCmd, worldId, Boolean(restartSteam));
         res.json(result);
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/env-testing/launch-test-window:', err);

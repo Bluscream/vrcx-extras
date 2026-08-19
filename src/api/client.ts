@@ -409,14 +409,13 @@ export function fetchUserTimeline(
 
 export async function runSingleEnvTestApi(
     tool: string,
-    env: string,
-    args: string,
+    cmd: string,
     url: string
 ): Promise<import('@/types').EnvTestingRunResult> {
     const response = await fetch('/api/env-testing/run-single-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tool, env, args, url })
+        body: JSON.stringify({ tool, cmd, url })
     });
     if (!response.ok) {
         const payload = await response.json().catch(() => null);
@@ -427,14 +426,14 @@ export async function runSingleEnvTestApi(
 
 export async function launchEnvTestWindowApi(
     tool: string,
-    env: string,
-    args: string,
-    worldId: string
+    cmd: string,
+    worldId: string,
+    restartSteam: boolean = true
 ): Promise<import('@/types').EnvTestingLaunchResponse> {
     const response = await fetch('/api/env-testing/launch-test-window', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tool, env, args, worldId })
+        body: JSON.stringify({ tool, cmd, worldId, restartSteam })
     });
     if (!response.ok) {
         const payload = await response.json().catch(() => null);
