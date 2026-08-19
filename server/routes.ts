@@ -28,7 +28,7 @@ import {
     updateProtonRegistryKey
 } from './registry.ts';
 import { readVRChatConfig, saveVRChatConfig } from './config.ts';
-import { readLaunchOptions, saveLaunchOptions, isSteamRunning, stopSteam, startSteam, saveCompatTool } from './launcher.ts';
+import { readLaunchOptions, saveLaunchOptions, isSteamRunning, stopSteam, startSteam, saveCompatTool, readCompatTool } from './launcher.ts';
 import { getUserTimeline } from './user.ts';
 
 import {
@@ -621,6 +621,86 @@ router.post('/upload', async (req, res) => {
     } catch (err: unknown) {
         console.error('[API] Error in POST /api/upload:', err);
         res.status(500).json({ error: toErrorMessage(err, 'Failed to upload report file') });
+    }
+});
+
+// ─── Environment Testing & Single Benchmark Endpoints ─────────────────────────
+
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execFileAsync = promisify(execFile);
+
+router.post('/env-testing/run-single-test', async (req, res) => {
+    try {
+        const { tool = '', env = '', args = '', url = '' } = req.body || {};
+        const vrcvtBin = '/run/media/system/Data/Projects/vrcvt/bin/vrcvt';
+
+        const cliArgs = ['--single', '--json'];
+        if (tool) cliArgs.push('--tool', tool);
+        if (env) cliArgs.push('--env', env);
+        if (args) cliArgs.push('--args', args);
+        if (url) cliArgs.push('--url', url);
+
+        const { stdout } = await execFileAsync(vrcvtBin, cliArgs, { timeout: 20000 });
+        const result = JSON.parse(stdout.trim());
+        res.json(result);
+    } catch (err: unknown) {
+        console.error('[API] Error in POST /api/env-testing/run-single-test:', err);
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to execute environment test') });
+    }
+});
+
+router.post('/env-testing/launch-test-window', async (req, res) => {
+    try {
+        const { tool = '', env = '', args = '', worldId = 'wrld_a2fd9533-5c69-400b-a34e-ae0c11df99e1' } = req.body || {};
+
+        // 1. RAM BACKUP PHASE: Read and back up current Steam settings to memory
+        const originalTool = readCompatTool();
+        const originalOptionsRes = readLaunchOptions();
+        const originalOptions = originalOptionsRes.rawLaunchOptions || '';
+
+        console.log('[Environment Testing] RAM Backup created:');
+        console.log('  Original Tool   :', originalTool);
+        console.log('  Original Options:', originalOptions);
+
+        // 2. APPLY TEST CONFIGURATION
+        if (tool) {
+            saveCompatTool(tool);
+        }
+        const testLaunchOptions = `${env} %command% --desktop --watch-world=${worldId} ${args}`.trim();
+        saveLaunchOptions(testLaunchOptions);
+
+        // 3. TRIGGER VRCHAT LAUNCH
+        try {
+            await execFileAsync('pkill', ['-f', 'reaper SteamLaunch AppId=438100']);
+        } catch {}
+
+        try {
+            await execFileAsync('bazzite-steam', ['-applaunch', '438100', '--desktop', `--watch-world=${worldId}`]);
+        } catch {
+            await execFileAsync('steam', [`steam://rungameid/438100//vrchat://launch?id=${worldId}`]);
+        }
+
+        // 4. DELAY & RESTORE FROM RAM: Wait 3s for game process initialization then restore permanent config
+        setTimeout(() => {
+            try {
+                saveCompatTool(originalTool);
+                saveLaunchOptions(originalOptions);
+                console.log('[Environment Testing] RAM Restore complete: Permanent Steam settings restored.');
+            } catch (restoreErr) {
+                console.error('[Environment Testing] Error restoring Steam config from RAM:', restoreErr);
+            }
+        }, 3000);
+
+        res.json({
+            success: true,
+            message: 'VRChat launched with test config. Permanent Steam settings backed up to RAM and restored.',
+            originalToolRestored: originalTool,
+            originalOptionsRestored: originalOptions
+        });
+    } catch (err: unknown) {
+        console.error('[API] Error in POST /api/env-testing/launch-test-window:', err);
+        res.status(500).json({ error: toErrorMessage(err, 'Failed to spawn VRChat test window') });
     }
 });
 

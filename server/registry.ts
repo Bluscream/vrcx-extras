@@ -76,6 +76,104 @@ function findWineBinary(): string | null {
     return found;
 }
 
+function getWineEnv(prefix: string, wineBin?: string | null): Record<string, string> {
+    const env: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        WINEPREFIX: prefix
+    };
+    if (wineBin) {
+        const wineDir = path.dirname(wineBin);
+        const wineserverBin = path.join(wineDir, 'wineserver');
+        env.WINELOADER = wineBin;
+        env.PATH = `${wineDir}:${process.env.PATH || ''}`;
+        if (fs.existsSync(wineserverBin)) {
+            env.WINESERVER = wineserverBin;
+        }
+    }
+    return env;
+}
+
+function importRegContentToUserReg(prefix: string, regContent: string): void {
+    const userRegPath = path.join(prefix, 'user.reg');
+    if (!fs.existsSync(userRegPath)) {
+        throw new Error(`user.reg not found at ${userRegPath}`);
+    }
+
+    const newKeyValues = new Map<string, string>();
+    for (const line of regContent.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('"')) {
+            const match = trimmed.match(/^"([^"]+)"=/);
+            if (match && match[1]) {
+                newKeyValues.set(match[1], trimmed);
+            }
+        }
+    }
+
+    if (newKeyValues.size === 0) return;
+
+    const content = fs.readFileSync(userRegPath, 'utf-8');
+    const lines = content.split('\n');
+    const updatedLines: string[] = [];
+    let inVrcBlock = false;
+    let vrcBlockFound = false;
+    const handledKeys = new Set<string>();
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        if (trimmed.includes('Software\\\\VRChat\\\\VRChat')) {
+            inVrcBlock = true;
+            vrcBlockFound = true;
+            updatedLines.push(line);
+            continue;
+        }
+
+        if (inVrcBlock && trimmed.startsWith('[')) {
+            for (const [k, newLine] of newKeyValues.entries()) {
+                if (!handledKeys.has(k)) {
+                    updatedLines.push(newLine);
+                    handledKeys.add(k);
+                }
+            }
+            inVrcBlock = false;
+        }
+
+        if (inVrcBlock && trimmed.startsWith('"')) {
+            const match = trimmed.match(/^"([^"]+)"=/);
+            if (match && match[1]) {
+                const keyName = match[1];
+                if (newKeyValues.has(keyName)) {
+                    updatedLines.push(newKeyValues.get(keyName)!);
+                    handledKeys.add(keyName);
+                    continue;
+                }
+            }
+        }
+
+        updatedLines.push(line);
+    }
+
+    if (inVrcBlock) {
+        for (const [k, newLine] of newKeyValues.entries()) {
+            if (!handledKeys.has(k)) {
+                updatedLines.push(newLine);
+                handledKeys.add(k);
+            }
+        }
+    } else if (!vrcBlockFound) {
+        updatedLines.push('');
+        updatedLines.push('[Software\\\\VRChat\\\\VRChat]');
+        for (const [, newLine] of newKeyValues.entries()) {
+            updatedLines.push(newLine);
+        }
+    }
+
+    fs.writeFileSync(userRegPath, updatedLines.join('\n'), 'utf-8');
+    console.log(`[RegistryService] Successfully imported ${newKeyValues.size} key(s) directly into ${userRegPath}.`);
+}
+
 /**
  * The live snapshot, cached because reading it spawns `wine reg query` and
  * takes ~3s. Writes made through this server invalidate it immediately; the
@@ -358,7 +456,11 @@ function toRegistryEntries(raw: unknown): Record<string, RegistryEntry> {
             skipped++;
             continue;
         }
-        entries[key] = { type, data };
+        let cleanData = data;
+        if (typeof cleanData === 'string') {
+            cleanData = cleanData.replace(/\0/g, '');
+        }
+        entries[key] = { type, data: cleanData };
     }
 
     if (skipped > 0) {
@@ -641,14 +743,17 @@ export async function restoreRegistryBackup(index: number): Promise<{
 
     console.log(`[RegistryService] Executing Wine regedit: WINEPREFIX="${prefix}" "${wineBin}" regedit "${tempRegPath}"`);
     try {
-        const { stdout, stderr } = await execFileAsync(wineBin, ['regedit', tempRegPath], {
-            env: {
-                ...process.env,
-                WINEPREFIX: prefix
-            }
-        });
-        if (stdout) console.log(`[RegistryService] regedit stdout: ${stdout}`);
-        if (stderr) console.log(`[RegistryService] regedit stderr: ${stderr}`);
+        console.log(`[RegistryService] Executing Wine regedit: WINEPREFIX="${prefix}" "${wineBin}" regedit "${tempRegPath}"`);
+        try {
+            const { stdout, stderr } = await execFileAsync(wineBin, ['regedit', tempRegPath], {
+                env: getWineEnv(prefix, wineBin)
+            });
+            if (stdout) console.log(`[RegistryService] regedit stdout: ${stdout}`);
+            if (stderr) console.log(`[RegistryService] regedit stderr: ${stderr}`);
+        } catch (err: unknown) {
+            console.warn('[RegistryService] Wine regedit failed (version mismatch or environment error), falling back to direct user.reg file import:', toErrorMessage(err));
+            importRegContentToUserReg(prefix, regContent);
+        }
 
         const { verifiedCount, missingKeys, extraKeys } = verifyRestoredRegistry(prefix, target.entries);
 
@@ -668,9 +773,6 @@ export async function restoreRegistryBackup(index: number): Promise<{
             missingKeys,
             extraKeys
         };
-    } catch (err: unknown) {
-        console.error('[RegistryService] Error executing Wine regedit:', err);
-        throw new Error(`Failed to execute regedit: ${toErrorMessage(err)}`);
     } finally {
         if (fs.existsSync(tempRegPath)) {
             fs.unlinkSync(tempRegPath);
@@ -775,10 +877,10 @@ export async function updateProtonRegistryKey(
 
             console.log(`[RegistryService] Executing wine reg add for ${key} and ${hashedKey}...`);
             await execFileAsync(wineBin, ['reg', 'add', 'HKCU\\Software\\VRChat\\VRChat', '/v', key, '/t', regTypeStr, '/d', regValStr, '/f'], {
-                env: { ...process.env, WINEPREFIX: prefix }
+                env: getWineEnv(prefix, wineBin)
             });
             await execFileAsync(wineBin, ['reg', 'add', 'HKCU\\Software\\VRChat\\VRChat', '/v', hashedKey, '/t', regTypeStr, '/d', regValStr, '/f'], {
-                env: { ...process.env, WINEPREFIX: prefix }
+                env: getWineEnv(prefix, wineBin)
             });
             console.log('[RegistryService] Wine reg add succeeded.');
             return {
@@ -786,11 +888,11 @@ export async function updateProtonRegistryKey(
                 message: `Successfully updated "${key}" in live Proton prefix.`
             };
         } catch (err: unknown) {
-            console.warn('[RegistryService] Wine reg add failed, falling back to regedit file import:', toErrorMessage(err));
+            console.warn('[RegistryService] Wine reg add failed, falling back to regedit / direct import:', toErrorMessage(err));
         }
     }
 
-    // Regedit fallback import
+    // Regedit & direct user.reg fallback import
     const entries: Record<string, RegistryEntry> = {
         [key]: { type, data: value }
     };
@@ -800,13 +902,15 @@ export async function updateProtonRegistryKey(
 
     try {
         if (wineBin) {
-            await execFileAsync(wineBin, ['regedit', tempRegPath], {
-                env: { ...process.env, WINEPREFIX: prefix }
-            });
+            try {
+                await execFileAsync(wineBin, ['regedit', tempRegPath], {
+                    env: getWineEnv(prefix, wineBin)
+                });
+            } catch {
+                importRegContentToUserReg(prefix, regContent);
+            }
         } else {
-            // Append directly to user.reg fallback
-            const userRegPath = path.join(prefix, 'user.reg');
-            fs.appendFileSync(userRegPath, `\n${regContent}`);
+            importRegContentToUserReg(prefix, regContent);
         }
         return {
             success: true,

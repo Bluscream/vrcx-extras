@@ -378,4 +378,21 @@ export interface UserTimelineResponse {
     displayNames: string[];
 }
 
+export interface EnvTestingRunResult {
+    success: boolean;
+    elapsed_ms: number;
+    hresult: string;
+    error_type?: string | null;
+    solution?: string | null;
+    attempts?: number;
+    stderr_snippet?: string | null;
+}
+
+export interface EnvTestingLaunchResponse {
+    success: boolean;
+    message: string;
+    originalToolRestored: string;
+    originalOptionsRestored: string;
+}
+
 

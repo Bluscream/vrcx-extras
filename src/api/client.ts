@@ -406,3 +406,39 @@ export function fetchUserTimeline(
     if (displayNames.length > 0) params.names = displayNames.join(',');
     return request<UserTimelineResponse>('user/timeline', params, signal);
 }
+
+export async function runSingleEnvTestApi(
+    tool: string,
+    env: string,
+    args: string,
+    url: string
+): Promise<import('@/types').EnvTestingRunResult> {
+    const response = await fetch('/api/env-testing/run-single-test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool, env, args, url })
+    });
+    if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new ApiError(payload?.error || 'Failed to execute single environment test', response.status);
+    }
+    return response.json();
+}
+
+export async function launchEnvTestWindowApi(
+    tool: string,
+    env: string,
+    args: string,
+    worldId: string
+): Promise<import('@/types').EnvTestingLaunchResponse> {
+    const response = await fetch('/api/env-testing/launch-test-window', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool, env, args, worldId })
+    });
+    if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new ApiError(payload?.error || 'Failed to spawn VRChat test window', response.status);
+    }
+    return response.json();
+}

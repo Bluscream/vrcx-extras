@@ -6,6 +6,7 @@ import { PlayerSearchPage } from '@/features/search/PlayerSearchPage';
 import { RegistryBackupPage } from '@/features/registry/RegistryBackupPage';
 import { ConfigPage } from '@/features/config/ConfigPage';
 import { CommandLinePage } from '@/features/launcher/CommandLinePage';
+import { EnvTestingPage } from '@/features/env-testing/EnvTestingPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { UserPage } from '@/features/user/UserPage';
 
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
             { path: '/registry', element: <RegistryBackupPage /> },
             { path: '/config', element: <ConfigPage /> },
             { path: '/cmdline', element: <CommandLinePage /> },
+            { path: '/env-testing', element: <EnvTestingPage /> },
             { path: '/settings', element: <SettingsPage /> },
             { path: '*', element: <Navigate to={defaultRoute} replace /> }
         ]

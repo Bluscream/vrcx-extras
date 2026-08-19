@@ -36,7 +36,9 @@ export type {
     SettingsSaveResponse,
     SettingsResetResponse,
     UserTimelineRow,
-    UserTimelineResponse
+    UserTimelineResponse,
+    EnvTestingRunResult,
+    EnvTestingLaunchResponse
 } from '../shared/api.ts';
 
 // Value exports (not just types): shared runtime helpers for the registry table.

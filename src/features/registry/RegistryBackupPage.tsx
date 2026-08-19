@@ -68,9 +68,15 @@ const RegistryRowBase = memo(({ index, style, data }: RowComponentProps<{ data: 
     const isEditingVal = inlineCell?.key === key && inlineCell.field === 'value';
     const rowTitle = def ? `[VRCOSC] ${def.description}${def.defaultValue ? ` (Default: ${def.defaultValue})` : ''}` : key;
 
-    const isDifferent = data.isComparingWithCurrent && String(currentVal?.data ?? '') !== String(backupVal?.data ?? '');
-    const cStr = String(currentVal?.data ?? '-');
-    const bStr = String(backupVal?.data ?? '-');
+    const formatVal = (val: RegistryEntry | undefined, fallback: string = '-') => {
+        if (!val || val.data === undefined || val.data === null) return fallback;
+        const str = String(val.data);
+        return str.replace(/\0/g, '');
+    };
+
+    const cStr = formatVal(currentVal);
+    const bStr = formatVal(backupVal);
+    const isDifferent = data.isComparingWithCurrent && formatVal(currentVal, '') !== formatVal(backupVal, '');
 
     return (
         <div

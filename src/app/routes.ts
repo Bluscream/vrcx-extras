@@ -1,4 +1,4 @@
-import { LinkIcon, DatabaseIcon, FileJsonIcon, TerminalIcon, SettingsIcon, UsersIcon, type LucideIcon } from 'lucide-react';
+import { LinkIcon, DatabaseIcon, FileJsonIcon, TerminalIcon, SettingsIcon, UsersIcon, FlaskConicalIcon, type LucideIcon } from 'lucide-react';
 
 export interface NavRoute {
     path: string;
@@ -13,6 +13,7 @@ export const navRoutes: NavRoute[] = [
     { path: '/registry', label: 'Proton Registry', icon: DatabaseIcon },
     { path: '/config', label: 'VRChat Config', icon: FileJsonIcon },
     { path: '/cmdline', label: 'Command Line', icon: TerminalIcon },
+    { path: '/env-testing', label: 'Environment Testing', icon: FlaskConicalIcon },
     { path: '/settings', label: 'Settings', icon: SettingsIcon }
 ];
 
